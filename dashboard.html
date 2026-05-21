@@ -466,8 +466,8 @@ async function fetchRealtime() {
   } catch(e) { console.warn('Realtime error:', e); }
 }
 
-// ── FETCH STATION LIST (to get stationId) ──
-async function fetchStationList() {
+// (merged into fetchStationId above)
+async function fetchStationList_OLD() {
   if (!await ensureToken()) return;
   try {
     const appId = localStorage.getItem('dy_appId') || DEYE_APP_ID;
@@ -691,7 +691,6 @@ function updateBanner() {
 // ── LIVE ──
 function startLive() {
   if(liveTimer) clearInterval(liveTimer);
-  fetchStationList();
   fetchRealtime();
   fetchDayStats();
   liveTimer = setInterval(()=>{ fetchRealtime(); fetchDayStats(); }, 30000);
