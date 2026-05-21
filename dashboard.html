@@ -26,7 +26,777 @@
   @keyframes pulse-sun { 0%,100%{box-shadow:0 0 24px rgba(245,166,35,0.4)} 50%{box-shadow:0 0 40px rgba(245,166,35,0.7)} }
   .logo-text h1 { font-size:20px; font-weight:800; letter-spacing:-0.5px; }
   .logo-text p  { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); margin-top:2px; }
+  .status-pill { display:flex; align-items:center; gap:8px; background:rgba(168,224,99,0.1); border:1px solid rgba(168,224,<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deye 12kW · Sistema Solar</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --sun: #F5A623; --sun-glow: #FF6B00; --grid: #4ECDC4; --battery: #A8E063;
+    --load: #C471ED; --bg: #0A0E1A; --bg2: #0F1525; --bg3: #141B2D;
+    --card: #1A2236; --border: rgba(255,255,255,0.07); --text: #E8EDF5;
+    --muted: #5A6785; --accent: #4ECDC4; --green: #A8E063; --red: #FF6B6B; --euro: #FFD166;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Syne',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; overflow-x:hidden; }
+  body::before { content:''; position:fixed; top:-50%; left:-20%; width:60%; height:60%; background:radial-gradient(ellipse,rgba(245,166,35,0.06) 0%,transparent 70%); animation:drift 12s ease-in-out infinite alternate; pointer-events:none; z-index:0; }
+  body::after  { content:''; position:fixed; bottom:-30%; right:-10%; width:50%; height:50%; background:radial-gradient(ellipse,rgba(78,205,196,0.05) 0%,transparent 70%); animation:drift2 15s ease-in-out infinite alternate; pointer-events:none; z-index:0; }
+  @keyframes drift  { 0%{transform:translate(0,0)} 100%{transform:translate(5%,8%)} }
+  @keyframes drift2 { 0%{transform:translate(0,0)} 100%{transform:translate(-5%,-6%)} }
+  .wrapper { position:relative; z-index:1; max-width:1440px; margin:0 auto; padding:0 24px 60px; }
+
+  header { display:flex; align-items:center; justify-content:space-between; padding:24px 0 32px; border-bottom:1px solid var(--border); margin-bottom:32px; }
+  .logo-block { display:flex; align-items:center; gap:16px; }
+  .logo-icon { width:44px; height:44px; background:linear-gradient(135deg,var(--sun),var(--sun-glow)); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:22px; box-shadow:0 0 24px rgba(245,166,35,0.4); animation:pulse-sun 3s ease-in-out infinite; }
+  @keyframes pulse-sun { 0%,100%{box-shadow:0 0 24px rgba(245,166,35,0.4)} 50%{box-shadow:0 0 40px rgba(245,166,35,0.7)} }
+  .logo-text h1 { font-size:20px; font-weight:800; letter-spacing:-0.5px; }
+  .logo-text p  { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); margin-top:2px; }
   .status-pill { display:flex; align-items:center; gap:8px; background:rgba(168,224,99,0.1); border:1px solid rgba(168,224,99,0.3); padding:8px 16px; border-radius:100px; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--battery); transition:all 0.5s; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--battery); animation:blink 2s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .header-time { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted); text-align:right; }
+  .header-time .time { font-size:20px; color:var(--text); font-weight:500; }
+  .api-btn { background:linear-gradient(135deg,rgba(78,205,196,0.2),rgba(78,205,196,0.05)); border:1px solid rgba(78,205,196,0.4); color:#4ECDC4; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; padding:10px 18px; border-radius:10px; cursor:pointer; transition:all 0.2s; letter-spacing:1px; }
+  .api-btn:hover { background:rgba(78,205,196,0.15); }
+
+  /* BANNER */
+  .api-banner { display:none; align-items:center; gap:10px; border-radius:12px; padding:10px 18px; margin-bottom:16px; font-family:'JetBrains Mono',monospace; font-size:12px; }
+  .api-banner.ok  { display:flex; background:rgba(168,224,99,0.08); border:1px solid rgba(168,224,99,0.25); color:var(--green); }
+  .api-banner.err { display:flex; background:rgba(255,107,107,0.08); border:1px solid rgba(255,107,107,0.25); color:var(--red); }
+
+  /* TARIFF BAR */
+  .tariff-bar { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:16px 24px; margin-bottom:24px; display:flex; align-items:center; gap:24px; flex-wrap:wrap; }
+  .tariff-label { font-size:10px; font-weight:700; letter-spacing:3px; color:var(--muted); font-family:'JetBrains Mono',monospace; white-space:nowrap; }
+  .tariff-inputs { display:flex; gap:16px; flex-wrap:wrap; flex:1; }
+  .tariff-field { display:flex; align-items:center; gap:8px; background:var(--bg3); border:1px solid var(--border); border-radius:10px; padding:8px 14px; }
+  .tariff-field label { font-size:11px; color:var(--muted); white-space:nowrap; }
+  .tariff-field input { background:none; border:none; outline:none; color:var(--euro); font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:500; width:70px; text-align:right; }
+  .tariff-field span { font-size:11px; color:var(--muted); }
+  .tariff-btn { background:linear-gradient(135deg,rgba(255,209,102,0.2),rgba(255,209,102,0.05)); border:1px solid rgba(255,209,102,0.4); color:var(--euro); font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:600; padding:9px 18px; border-radius:8px; cursor:pointer; transition:all 0.2s; white-space:nowrap; }
+
+  /* ENERGY FLOW */
+  .energy-flow { background:var(--card); border:1px solid var(--border); border-radius:24px; padding:40px; margin-bottom:24px; position:relative; overflow:hidden; }
+  .energy-flow::before { content:'FLUXO DE ENERGIA'; position:absolute; top:20px; left:28px; font-size:10px; font-weight:700; letter-spacing:3px; color:var(--muted); font-family:'JetBrains Mono',monospace; }
+  .flow-grid { display:grid; grid-template-columns:1fr auto auto auto 1fr; grid-template-rows:auto auto auto auto auto; align-items:center; justify-items:center; gap:4px 0; padding:10px 0; }
+  .fg-solar{grid-column:3;grid-row:1} .fg-arrow-top{grid-column:3;grid-row:2} .fg-battery{grid-column:1;grid-row:3} .fg-line-bat{grid-column:2;grid-row:3} .fg-inverter{grid-column:3;grid-row:3} .fg-line-grid{grid-column:4;grid-row:3} .fg-grid{grid-column:5;grid-row:3} .fg-arrow-bot{grid-column:3;grid-row:4} .fg-load{grid-column:3;grid-row:5}
+  .flow-node { display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .node-icon { width:80px; height:80px; border-radius:20px; display:flex; align-items:center; justify-content:center; font-size:32px; }
+  .node-icon.solar    { background:linear-gradient(135deg,rgba(245,166,35,0.2),rgba(255,107,0,0.1)); border:2px solid rgba(245,166,35,0.4); box-shadow:0 0 30px rgba(245,166,35,0.2); }
+  .node-icon.inverter { background:linear-gradient(135deg,rgba(78,205,196,0.2),rgba(78,205,196,0.05)); border:2px solid rgba(78,205,196,0.5); box-shadow:0 0 30px rgba(78,205,196,0.2); width:100px;height:100px;border-radius:24px;font-size:40px; }
+  .node-icon.battery  { background:linear-gradient(135deg,rgba(168,224,99,0.2),rgba(168,224,99,0.05)); border:2px solid rgba(168,224,99,0.4); box-shadow:0 0 30px rgba(168,224,99,0.2); }
+  .node-icon.grid-i   { background:linear-gradient(135deg,rgba(78,205,196,0.15),rgba(78,205,196,0.05)); border:2px solid rgba(78,205,196,0.3); }
+  .node-icon.load-i   { background:linear-gradient(135deg,rgba(196,113,237,0.2),rgba(196,113,237,0.05)); border:2px solid rgba(196,113,237,0.4); box-shadow:0 0 30px rgba(196,113,237,0.2); }
+  .node-label { font-size:13px; font-weight:700; letter-spacing:0.5px; }
+  .node-value { font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:500; padding:4px 12px; border-radius:100px; background:rgba(255,255,255,0.06); }
+  .flow-line { position:relative; overflow:hidden; }
+  .flow-line.h { width:80px; height:2px; }
+  .flow-line.v { width:2px; height:60px; }
+  .flow-line .track { position:absolute; inset:0; background:rgba(255,255,255,0.1); border-radius:2px; }
+  .flow-line .moving { position:absolute; border-radius:2px; }
+  .flow-line.h .moving { animation:flow-h 1.5s linear infinite; }
+  .flow-line.v .moving { animation:flow-v 1.5s linear infinite; }
+  .flow-line.solar-l   .moving { background:linear-gradient(90deg,transparent,var(--sun),transparent);     height:100%;width:40px; }
+  .flow-line.bat-l     .moving { background:linear-gradient(90deg,transparent,var(--battery),transparent); height:100%;width:40px; }
+  .flow-line.bat-v     .moving { background:linear-gradient(0deg,transparent,var(--battery),transparent);  width:100%;height:30px; }
+  .flow-line.grid-l    .moving { background:linear-gradient(90deg,transparent,var(--grid),transparent);    height:100%;width:40px; }
+  @keyframes flow-h { 0%{transform:translateX(-40px)} 100%{transform:translateX(80px)} }
+  @keyframes flow-v { 0%{transform:translateY(60px)} 100%{transform:translateY(-30px)} }
+  @media(max-width:600px){ .node-icon{width:60px!important;height:60px!important;font-size:24px!important} .node-icon.inverter{width:70px!important;height:70px!important;font-size:30px!important} .flow-line.h{width:40px!important} .flow-line.v{height:40px!important} }
+
+  /* CARDS */
+  .cards-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:20px; padding:24px; position:relative; overflow:hidden; transition:transform 0.2s,border-color 0.2s; }
+  .card:hover { transform:translateY(-2px); border-color:rgba(255,255,255,0.12); }
+  .card-label { font-size:10px; font-weight:700; letter-spacing:3px; color:var(--muted); font-family:'JetBrains Mono',monospace; margin-bottom:16px; }
+  .card-value { font-size:36px; font-weight:800; letter-spacing:-1px; line-height:1; margin-bottom:4px; }
+  .card-unit  { font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--muted); }
+  .card-sub   { margin-top:16px; font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); display:flex; align-items:center; gap:6px; }
+  .card.solar-card   .card-value { color:var(--sun); }
+  .card.battery-card .card-value { color:var(--battery); }
+  .card.grid-card    .card-value { color:var(--grid); }
+  .card.load-card    .card-value { color:var(--load); }
+  .card::after { content:''; position:absolute; top:-30px; right:-30px; width:80px; height:80px; border-radius:50%; opacity:0.12; }
+  .card.solar-card::after{background:var(--sun)} .card.battery-card::after{background:var(--battery)} .card.grid-card::after{background:var(--grid)} .card.load-card::after{background:var(--load)}
+  .bat-bar-wrap { margin-top:14px; background:rgba(255,255,255,0.06); border-radius:100px; height:6px; overflow:hidden; }
+  .bat-bar-fill { height:100%; border-radius:100px; background:linear-gradient(90deg,#A8E063,#4ECDC4); transition:width 1s ease; position:relative; overflow:hidden; }
+  .bat-bar-fill::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg,transparent,rgba(255,255,255,0.4),transparent); animation:shimmer 2s linear infinite; }
+  @keyframes shimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
+
+  /* SECTION */
+  .section-divider { display:flex; align-items:center; gap:16px; margin:32px 0 20px; }
+  .section-divider h2 { font-size:11px; font-weight:700; letter-spacing:4px; color:var(--muted); font-family:'JetBrains Mono',monospace; white-space:nowrap; }
+  .section-divider::after { content:''; flex:1; height:1px; background:var(--border); }
+
+  /* TABS */
+  .tab-row { display:flex; gap:8px; margin-bottom:20px; }
+  .tab-btn { font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600; padding:9px 20px; border-radius:10px; cursor:pointer; border:1px solid var(--border); background:transparent; color:var(--muted); transition:all 0.2s; }
+  .tab-btn.active { background:linear-gradient(135deg,rgba(255,209,102,0.18),rgba(255,209,102,0.05)); border-color:rgba(255,209,102,0.5); color:var(--euro); }
+  .tab-panel { display:none; }
+  .tab-panel.active { display:block; }
+
+  /* FINANCE */
+  .finance-grid { display:grid; grid-template-columns:repeat(3,1fr) 1.2fr; gap:16px; margin-bottom:16px; }
+  .fin-card { background:var(--card); border:1px solid var(--border); border-radius:20px; padding:22px; position:relative; overflow:hidden; }
+  .fin-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; border-radius:20px 20px 0 0; }
+  .fin-card.import::before{background:linear-gradient(90deg,var(--red),transparent)} .fin-card.export::before{background:linear-gradient(90deg,var(--green),transparent)} .fin-card.saving::before{background:linear-gradient(90deg,var(--euro),transparent)} .fin-card.balance::before{background:linear-gradient(90deg,var(--accent),transparent)}
+  .fin-icon  { font-size:22px; margin-bottom:10px; display:block; }
+  .fin-label { font-size:10px; font-weight:700; letter-spacing:3px; color:var(--muted); font-family:'JetBrains Mono',monospace; margin-bottom:10px; }
+  .fin-kwh   { font-size:26px; font-weight:800; letter-spacing:-0.5px; margin-bottom:2px; }
+  .fin-card.import .fin-kwh{color:var(--red)} .fin-card.export .fin-kwh{color:var(--green)} .fin-card.saving .fin-kwh{color:var(--euro)} .fin-card.balance .fin-kwh{color:var(--accent)}
+  .fin-sub { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); margin-bottom:14px; }
+  .fin-cost-row { display:flex; justify-content:space-between; align-items:center; background:var(--bg3); border-radius:10px; padding:10px 14px; margin-top:4px; }
+  .fin-cost-label { font-size:11px; color:var(--muted); font-family:'JetBrains Mono',monospace; }
+  .fin-cost-val { font-size:18px; font-weight:800; }
+  .fin-card.import .fin-cost-val{color:var(--red)} .fin-card.export .fin-cost-val{color:var(--green)} .fin-card.saving .fin-cost-val{color:var(--euro)} .fin-card.balance .fin-cost-val{color:var(--accent)}
+  .balance-rows { margin-top:10px; display:flex; flex-direction:column; gap:8px; }
+  .bal-row { display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border-radius:8px; background:var(--bg3); }
+  .bal-row-label { font-size:11px; color:var(--muted); font-family:'JetBrains Mono',monospace; }
+  .bal-row-val { font-size:14px; font-weight:700; font-family:'JetBrains Mono',monospace; }
+  .pos{color:var(--green)} .neg{color:var(--red)}
+  .finance-chart-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+  .chart-card { background:var(--card); border:1px solid var(--border); border-radius:20px; padding:22px; }
+  .chart-title { font-size:10px; font-weight:700; letter-spacing:3px; color:var(--muted); font-family:'JetBrains Mono',monospace; margin-bottom:16px; }
+  .chart-wrap { height:160px; position:relative; }
+
+  /* BOTTOM */
+  .bottom-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+  .today-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px; }
+  .today-stat { background:var(--bg3); border-radius:12px; padding:14px; }
+  .today-stat-label { font-size:10px; color:var(--muted); font-family:'JetBrains Mono',monospace; margin-bottom:6px; }
+  .today-stat-val { font-size:22px; font-weight:800; }
+  .alert-item { display:flex; align-items:flex-start; gap:12px; padding:12px 0; border-bottom:1px solid var(--border); }
+  .alert-item:last-child { border-bottom:none; }
+  .alert-icon { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
+  .alert-icon.ok{background:rgba(168,224,99,0.15)} .alert-icon.warn{background:rgba(245,166,35,0.15)} .alert-icon.info{background:rgba(78,205,196,0.15)}
+  .alert-title { font-size:13px; font-weight:600; margin-bottom:2px; }
+  .alert-time  { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted); }
+  .chart-area  { margin-top:16px; height:160px; position:relative; }
+
+  @media(max-width:1100px){ .cards-grid{grid-template-columns:repeat(2,1fr)} .finance-grid{grid-template-columns:1fr 1fr} .finance-chart-row{grid-template-columns:1fr} .bottom-grid{grid-template-columns:1fr 1fr} }
+  @media(max-width:700px)  { .cards-grid{grid-template-columns:1fr 1fr} .finance-grid{grid-template-columns:1fr} .bottom-grid{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <header>
+    <div class="logo-block">
+      <div class="logo-icon">☀️</div>
+      <div class="logo-text">
+        <h1>Sistema Solar Híbrido</h1>
+        <p>DEYE 12KW TRIFÁSICO · FELICITY 48V</p>
+      </div>
+    </div>
+    <div class="status-pill"><div class="dot"></div><span id="status-text">A LIGAR...</span></div>
+    <button class="api-btn" onclick="showModal()">⚙ CONFIGURAR API</button>
+    <div class="header-time">
+      <div class="time" id="clock">--:--:--</div>
+      <div id="date-str"></div>
+    </div>
+  </header>
+
+  <div id="api-banner" class="api-banner">
+    <span id="banner-icon">✅</span>
+    <span id="banner-text">Deye Cloud ligada</span>
+    <span style="margin-left:auto;opacity:0.6;font-size:10px" id="banner-time"></span>
+  </div>
+
+  <div class="tariff-bar">
+    <div class="tariff-label">⚙ TARIFAS</div>
+    <div class="tariff-inputs">
+      <div class="tariff-field"><label>Vazio (c/IVA)</label><input type="number" id="t-off" value="0.1214" step="0.001"><span>€/kWh</span></div>
+      <div class="tariff-field"><label>Fora de vazio</label><input type="number" id="t-peak" value="0.2009" step="0.001"><span>€/kWh</span></div>
+      <div class="tariff-field"><label>Venda (UPAC)</label><input type="number" id="t-sell" value="0.0650" step="0.001"><span>€/kWh</span></div>
+      <div class="tariff-field"><label>Potência contratada</label><input type="number" id="t-pot" value="40.21" step="0.10"><span>€/mês</span></div>
+    </div>
+    <button class="tariff-btn" onclick="recalcAll()">↻ ACTUALIZAR</button>
+  </div>
+
+  <div class="energy-flow">
+    <div class="flow-grid">
+      <div class="fg-solar"><div class="flow-node"><div class="node-icon solar">☀️</div><div class="node-label" style="color:var(--sun)">SOLAR</div><div class="node-value" id="pv-power">— W</div></div></div>
+      <div class="fg-arrow-top"><div class="flow-line v solar-l"><div class="track"></div><div class="moving"></div></div></div>
+      <div class="fg-battery"><div class="flow-node"><div class="node-icon battery">🔋</div><div class="node-label" style="color:var(--battery)">FELICITY</div><div class="node-value" id="bat-pct">—%</div></div></div>
+      <div class="fg-line-bat"><div class="flow-line h bat-l"><div class="track"></div><div class="moving"></div></div></div>
+      <div class="fg-inverter"><div class="flow-node"><div class="node-icon inverter">⚡</div><div class="node-label" style="color:var(--accent)">DEYE 12KW</div><div class="node-value" style="color:var(--accent)" id="inv-temp">—</div></div></div>
+      <div class="fg-line-grid"><div class="flow-line h grid-l"><div class="track"></div><div class="moving"></div></div></div>
+      <div class="fg-grid"><div class="flow-node"><div class="node-icon grid-i">🔌</div><div class="node-label" style="color:var(--grid)">REDE</div><div class="node-value" style="color:var(--grid)" id="grid-power">— W</div></div></div>
+      <div class="fg-arrow-bot"><div class="flow-line v bat-v"><div class="track"></div><div class="moving"></div></div></div>
+      <div class="fg-load"><div class="flow-node"><div class="node-icon load-i">🏠</div><div class="node-label" style="color:var(--load)">CONSUMO</div><div class="node-value" id="load-power">— W</div></div></div>
+    </div>
+  </div>
+
+  <div class="cards-grid">
+    <div class="card solar-card"><div class="card-label">POTÊNCIA SOLAR</div><div class="card-value" id="c-pv">—</div><div class="card-unit">kW de 12 kW</div><div class="card-sub" id="c-pv-sub">A aguardar dados...</div></div>
+    <div class="card battery-card"><div class="card-label">BATERIA FELICITY</div><div class="card-value" id="c-bat">—</div><div class="card-unit" id="c-bat-sub">%</div><div class="bat-bar-wrap"><div class="bat-bar-fill" id="bat-bar" style="width:0%"></div></div></div>
+    <div class="card grid-card"><div class="card-label">REDE ELÉCTRICA</div><div class="card-value" id="c-grid">—</div><div class="card-unit" id="c-grid-sub">W</div><div class="card-sub">Tensão: <span style="color:var(--grid)" id="c-grid-v">—</span></div></div>
+    <div class="card load-card"><div class="card-label">CONSUMO TOTAL</div><div class="card-value" id="c-load">—</div><div class="card-unit">kW activos</div><div class="card-sub" id="c-load-sub">A aguardar dados...</div></div>
+  </div>
+
+  <div class="section-divider"><h2>💶 ESTATÍSTICAS FINANCEIRAS</h2></div>
+  <div class="tab-row">
+    <button class="tab-btn active" onclick="switchTab('day',event)">HOJE</button>
+    <button class="tab-btn" onclick="switchTab('month',event)">ESTE MÊS</button>
+  </div>
+
+  <div class="tab-panel active" id="tab-day">
+    <div class="finance-grid">
+      <div class="fin-card import"><span class="fin-icon">⬇️</span><div class="fin-label">CONSUMO DA REDE</div><div class="fin-kwh" id="d-imp-kwh">— kWh</div><div class="fin-sub" id="d-imp-sub">—</div><div class="fin-cost-row"><span class="fin-cost-label">CUSTO ESTIMADO</span><span class="fin-cost-val" id="d-imp-cost">— €</span></div></div>
+      <div class="fin-card export"><span class="fin-icon">⬆️</span><div class="fin-label">EXPORTADO PARA A REDE</div><div class="fin-kwh" id="d-exp-kwh">— kWh</div><div class="fin-sub">Tarefa UPAC registada</div><div class="fin-cost-row"><span class="fin-cost-label">RECEITA ESTIMADA</span><span class="fin-cost-val" id="d-exp-rev">— €</span></div></div>
+      <div class="fin-card saving"><span class="fin-icon">💡</span><div class="fin-label">POUPANÇA (AUTOCONSUMO)</div><div class="fin-kwh" id="d-sav-kwh">— kWh</div><div class="fin-sub">Energia produzida e consumida localmente</div><div class="fin-cost-row"><span class="fin-cost-label">VALOR EVITADO</span><span class="fin-cost-val" id="d-sav-val">— €</span></div></div>
+      <div class="fin-card balance"><span class="fin-icon">⚖️</span><div class="fin-label">SALDO DO DIA</div><div class="fin-kwh" id="d-bal">— €</div><div class="fin-sub" id="d-bal-sub">vs. sem sistema solar</div><div class="balance-rows"><div class="bal-row"><span class="bal-row-label">Receita venda</span><span class="bal-row-val pos" id="d-b-exp">—</span></div><div class="bal-row"><span class="bal-row-label">Poupança autoconsumo</span><span class="bal-row-val pos" id="d-b-sav">—</span></div><div class="bal-row"><span class="bal-row-label">Custo rede</span><span class="bal-row-val neg" id="d-b-imp">—</span></div></div></div>
+    </div>
+    <div class="finance-chart-row">
+      <div class="chart-card"><div class="chart-title">DISTRIBUIÇÃO ENERGÉTICA HOJE (kWh)</div><div class="chart-wrap"><canvas id="dayPieChart"></canvas></div></div>
+      <div class="chart-card"><div class="chart-title">CUSTO vs POUPANÇA HORA A HORA (€)</div><div class="chart-wrap"><canvas id="dayCostChart"></canvas></div></div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-month">
+    <div class="finance-grid">
+      <div class="fin-card import"><span class="fin-icon">⬇️</span><div class="fin-label">CONSUMO DA REDE (MÊS)</div><div class="fin-kwh" id="m-imp-kwh">— kWh</div><div class="fin-sub" id="m-imp-sub">—</div><div class="fin-cost-row"><span class="fin-cost-label">CUSTO ESTIMADO</span><span class="fin-cost-val" id="m-imp-cost">— €</span></div></div>
+      <div class="fin-card export"><span class="fin-icon">⬆️</span><div class="fin-label">EXPORTADO (MÊS)</div><div class="fin-kwh" id="m-exp-kwh">— kWh</div><div class="fin-sub">Tarefa UPAC acumulada</div><div class="fin-cost-row"><span class="fin-cost-label">RECEITA ESTIMADA</span><span class="fin-cost-val" id="m-exp-rev">— €</span></div></div>
+      <div class="fin-card saving"><span class="fin-icon">💡</span><div class="fin-label">POUPANÇA (MÊS)</div><div class="fin-kwh" id="m-sav-kwh">— kWh</div><div class="fin-sub">Autoconsumo acumulado</div><div class="fin-cost-row"><span class="fin-cost-label">VALOR EVITADO</span><span class="fin-cost-val" id="m-sav-val">— €</span></div></div>
+      <div class="fin-card balance"><span class="fin-icon">⚖️</span><div class="fin-label">SALDO DO MÊS</div><div class="fin-kwh" id="m-bal">— €</div><div class="fin-sub">vs. sem solar</div><div class="balance-rows"><div class="bal-row"><span class="bal-row-label">Receita venda</span><span class="bal-row-val pos" id="m-b-exp">—</span></div><div class="bal-row"><span class="bal-row-label">Poupança autoconsumo</span><span class="bal-row-val pos" id="m-b-sav">—</span></div><div class="bal-row"><span class="bal-row-label">Custo rede + potência</span><span class="bal-row-val neg" id="m-b-imp">—</span></div></div></div>
+    </div>
+    <div class="finance-chart-row">
+      <div class="chart-card"><div class="chart-title">ENERGIA DIÁRIA DO MÊS (kWh)</div><div class="chart-wrap"><canvas id="monthBarChart"></canvas></div></div>
+      <div class="chart-card"><div class="chart-title">SALDO FINANCEIRO DIÁRIO (€)</div><div class="chart-wrap"><canvas id="monthCostChart"></canvas></div></div>
+    </div>
+  </div>
+
+  <div class="section-divider" style="margin-top:32px"><h2>📡 MONITORIZAÇÃO TÉCNICA</h2></div>
+  <div class="bottom-grid">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card" style="grid-column:1/-1;padding:20px"><div class="card-label">RESUMO DO DIA</div><div class="today-grid"><div class="today-stat"><div class="today-stat-label">☀️ PRODUZIDO</div><div class="today-stat-val" style="color:var(--sun)" id="today-pv">—</div></div><div class="today-stat"><div class="today-stat-label">🏠 CONSUMIDO</div><div class="today-stat-val" style="color:var(--load)" id="today-load">—</div></div><div class="today-stat"><div class="today-stat-label">⬇️ DA REDE</div><div class="today-stat-val" style="color:var(--grid)" id="today-grid">—</div></div><div class="today-stat"><div class="today-stat-label">⬆️ EXPORTADO</div><div class="today-stat-val" style="color:var(--battery)" id="today-exp">—</div></div></div></div>
+      <div class="card" style="padding:20px;text-align:center"><div class="card-label">☀️ SOL RESTANTE</div><div id="sun-remaining" style="font-size:42px;font-weight:800;color:var(--sun);margin:10px 0">—</div><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)">horas de produção</div><div style="margin-top:12px;background:rgba(255,255,255,0.05);border-radius:100px;height:6px;overflow:hidden"><div id="sun-bar" style="height:100%;border-radius:100px;background:linear-gradient(90deg,var(--sun),var(--sun-glow));width:0%;transition:width 1s"></div></div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);margin-top:6px">Pôr do sol: ~20:45</div></div>
+      <div class="card" style="padding:20px;text-align:center"><div class="card-label">🔋 AUTONOMIA</div><div id="bat-autonomy" style="font-size:42px;font-weight:800;color:var(--battery);margin:10px 0">—</div><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)">horas estimadas</div><div style="margin-top:12px;background:rgba(255,255,255,0.05);border-radius:100px;height:6px;overflow:hidden"><div id="bat-auto-bar" style="height:100%;border-radius:100px;background:linear-gradient(90deg,var(--battery),#4ECDC4);width:0%;transition:width 1s"></div></div><div id="bat-auto-sub" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);margin-top:6px">com consumo actual</div></div>
+      <div class="card" style="padding:20px;text-align:center"><div class="card-label">🌡️ TEMPERATURA</div><div id="inv-temp-big" style="font-size:42px;font-weight:800;color:var(--accent);margin:10px 0">—</div><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)">inversor Deye</div><div style="margin-top:12px;background:rgba(255,255,255,0.05);border-radius:100px;height:6px;overflow:hidden"><div id="temp-bar" style="height:100%;border-radius:100px;background:linear-gradient(90deg,#4ECDC4,#F5A623);width:0%;transition:width 1s"></div></div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);margin-top:6px">Normal: &lt;65°C</div></div>
+    </div>
+    <div class="card" style="grid-column:2/4"><div class="card-label">PRODUÇÃO SOLAR — ÚLTIMAS 12H</div><div class="chart-area"><canvas id="myChart"></canvas></div></div>
+    <div class="card"><div class="card-label">ALERTAS E ESTADO</div><div id="alerts-box"><div class="alert-item"><div class="alert-icon info">⏳</div><div><div class="alert-title">A aguardar ligação API</div><div class="alert-time">Configure as credenciais Deye Cloud</div></div></div></div></div>
+  </div>
+
+</div>
+
+<!-- MODAL -->
+<div id="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;backdrop-filter:blur(8px)">
+  <div style="background:#1A2236;border:1px solid rgba(78,205,196,0.3);border-radius:24px;padding:40px;width:100%;max-width:500px;margin:20px;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+      <div>
+        <div style="font-size:10px;letter-spacing:3px;color:#5A6785;font-family:'JetBrains Mono',monospace;margin-bottom:6px">CONFIGURAÇÃO</div>
+        <div style="font-size:20px;font-weight:800">🔌 API Deye Cloud</div>
+      </div>
+      <button onclick="hideModal()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#E8EDF5;width:36px;height:36px;border-radius:10px;cursor:pointer;font-size:16px">✕</button>
+    </div>
+    <div style="background:#0F1525;border-radius:12px;padding:14px;margin-bottom:20px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#5A6785;line-height:1.7">
+      🔑 Usa as credenciais da <span style="color:#4ECDC4">Deye Cloud API</span> (developer.deyecloud.com).<br>
+      AppId e AppSecret já preenchidos. Só precisas do email e password.
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:10px;color:#5A6785;font-family:'JetBrains Mono',monospace;letter-spacing:2px">APP ID</label>
+        <input id="m-appid" style="background:#0A0E1A;border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px 14px;color:#E8EDF5;font-family:'JetBrains Mono',monospace;font-size:13px;outline:none;width:100%">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:10px;color:#5A6785;font-family:'JetBrains Mono',monospace;letter-spacing:2px">APP SECRET</label>
+        <input id="m-secret" style="background:#0A0E1A;border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px 14px;color:#E8EDF5;font-family:'JetBrains Mono',monospace;font-size:13px;outline:none;width:100%">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:10px;color:#5A6785;font-family:'JetBrains Mono',monospace;letter-spacing:2px">EMAIL</label>
+        <input id="m-email" style="background:#0A0E1A;border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px 14px;color:#E8EDF5;font-family:'JetBrains Mono',monospace;font-size:13px;outline:none;width:100%">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:10px;color:#5A6785;font-family:'JetBrains Mono',monospace;letter-spacing:2px">PASSWORD</label>
+        <input id="m-pwd" type="password" placeholder="Introduz a tua password" style="background:#0A0E1A;border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px 14px;color:#E8EDF5;font-family:'JetBrains Mono',monospace;font-size:13px;outline:none;width:100%">
+        <span style="font-size:10px;color:#5A6785;font-family:'JetBrains Mono',monospace">🔒 Convertida em SHA256 localmente — nunca sai do browser</span>
+      </div>
+    </div>
+    <div id="modal-status" style="margin-top:16px;font-family:'JetBrains Mono',monospace;font-size:12px;min-height:20px;color:#4ECDC4;word-break:break-all;line-height:1.5"></div>
+    <button onclick="saveAndConnect()" style="margin-top:20px;width:100%;background:linear-gradient(135deg,rgba(78,205,196,0.25),rgba(78,205,196,0.05));border:1px solid rgba(78,205,196,0.5);color:#4ECDC4;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;padding:14px;border-radius:12px;cursor:pointer;letter-spacing:2px">⚡ LIGAR E GUARDAR</button>
+    <button onclick="clearCreds()" style="margin-top:8px;width:100%;background:transparent;border:1px solid rgba(255,107,107,0.3);color:rgba(255,107,107,0.7);font-family:'JetBrains Mono',monospace;font-size:11px;padding:10px;border-radius:10px;cursor:pointer">🗑 Limpar credenciais guardadas</button>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+// DEYE CLOUD API CONFIG
+// ══════════════════════════════════════════
+const DEYE_APP_ID     = '202605214003010';
+const DEYE_APP_SECRET = 'fda694b18c04151a4443e8fde8b48033';
+const DEYE_BASE_URL   = 'https://eu1-developer.deyecloud.com';
+// Device SNs (ajustar se necessário)
+const DEVICE_SN = '2509094105';
+const LOGGER_SN = '3584353340';
+
+let token       = localStorage.getItem('dy_token') || '';
+let tokenExpiry = parseInt(localStorage.getItem('dy_token_expiry') || '0');
+let liveTimer   = null;
+
+// ── CLOCK ──
+function tick() {
+  const n = new Date();
+  document.getElementById('clock').textContent = n.toLocaleTimeString('pt-PT');
+  document.getElementById('date-str').textContent = n.toLocaleDateString('pt-PT',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
+}
+setInterval(tick,1000); tick();
+
+// ── TABS ──
+function switchTab(tab, e) {
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  if(e&&e.target) e.target.classList.add('active');
+}
+
+// ── TARIFFS ──
+const T = () => ({
+  off:  parseFloat(document.getElementById('t-off').value)  || 0.1214,
+  peak: parseFloat(document.getElementById('t-peak').value) || 0.2009,
+  sell: parseFloat(document.getElementById('t-sell').value) || 0.0650,
+  pot:  parseFloat(document.getElementById('t-pot').value)  || 40.21,
+});
+
+// ── SHA256 ──
+async function sha256(s) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+// ── MODAL ──
+function showModal() {
+  document.getElementById('modal').style.display='flex';
+  document.getElementById('m-appid').value  = localStorage.getItem('dy_appId')  || DEYE_APP_ID;
+  document.getElementById('m-secret').value = localStorage.getItem('dy_secret') || DEYE_APP_SECRET;
+  document.getElementById('m-email').value  = localStorage.getItem('dy_email')  || '';
+  document.getElementById('m-pwd').value    = '';
+  document.getElementById('modal-status').textContent = '';
+}
+function hideModal() { document.getElementById('modal').style.display='none'; }
+
+function setStatus(msg, type) {
+  const el = document.getElementById('modal-status');
+  el.textContent = msg;
+  el.style.color = type==='ok'?'#A8E063': type==='err'?'#FF6B6B':'#4ECDC4';
+}
+
+async function saveAndConnect() {
+  const appId  = document.getElementById('m-appid').value.trim();
+  const secret = document.getElementById('m-secret').value.trim();
+  const email  = document.getElementById('m-email').value.trim();
+  const pwd    = document.getElementById('m-pwd').value;
+  if (!appId||!secret||!email||!pwd) { setStatus('⚠️ Preenche todos os campos','err'); return; }
+
+  setStatus('🔄 A converter password em SHA256...','info');
+  const pwdHash = await sha256(pwd);
+
+  localStorage.setItem('dy_appId',   appId);
+  localStorage.setItem('dy_secret',  secret);
+  localStorage.setItem('dy_email',   email);
+  localStorage.setItem('dy_pwdHash', pwdHash);
+
+  setStatus('🔄 A autenticar na Deye Cloud...','info');
+  const ok = await fetchToken(appId, secret, email, pwdHash);
+  if (ok) { hideModal(); startLive(); }
+}
+
+function clearCreds() {
+  ['dy_appId','dy_secret','dy_email','dy_pwdHash','dy_token','dy_token_expiry'].forEach(k=>localStorage.removeItem(k));
+  token=''; setStatus('✅ Credenciais removidas','ok');
+  setBanner(false);
+}
+
+// ── TOKEN — Deye Cloud API ──
+async function fetchToken(appId, secret, email, pwdHash) {
+  try {
+    // Endpoint: POST /v1.0/account/token?appId=xxx
+    const url = `${DEYE_BASE_URL}/v1.0/account/token?appId=${appId}`;
+    const body = {
+      appSecret: secret,
+      email:     email,
+      password:  pwdHash,
+      // username field opcional — usar email
+    };
+
+    setStatus('📡 A enviar pedido para Deye Cloud...','info');
+
+    const res  = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    const data = await res.json();
+    console.log('Deye token response:', data);
+
+    // Deye Cloud retorna access_token ou accessToken
+    const tok = data.access_token || data.accessToken || (data.data && data.data.access_token);
+    if (tok) {
+      token = tok.startsWith('Bearer ') ? tok : tok;
+      const exp = data.expires_in || data.expiresIn || 7200;
+      tokenExpiry = Date.now() + exp * 1000;
+      localStorage.setItem('dy_token', token);
+      localStorage.setItem('dy_token_expiry', String(tokenExpiry));
+      setStatus('✅ Ligado com sucesso à Deye Cloud!','ok');
+      setPill('api');
+      setBanner(true);
+      return true;
+    } else {
+      const err = data.msg || data.message || data.error || JSON.stringify(data);
+      setStatus('❌ Erro: ' + err, 'err');
+      return false;
+    }
+  } catch(e) {
+    setStatus('❌ Erro de rede: ' + e.message, 'err');
+    console.error('Token error:', e);
+    return false;
+  }
+}
+
+async function ensureToken() {
+  if (token && Date.now() < tokenExpiry - 60000) return true;
+  const appId  = localStorage.getItem('dy_appId')   || DEYE_APP_ID;
+  const secret = localStorage.getItem('dy_secret')  || DEYE_APP_SECRET;
+  const email  = localStorage.getItem('dy_email')   || '';
+  const hash   = localStorage.getItem('dy_pwdHash') || '';
+  if (!email || !hash) return false;
+  return await fetchToken(appId, secret, email, hash);
+}
+
+// ── FETCH REALTIME ──
+async function fetchRealtime() {
+  if (!await ensureToken()) return;
+  try {
+    const appId = localStorage.getItem('dy_appId') || DEYE_APP_ID;
+    // Deye Cloud device data endpoint
+    const url = `${DEYE_BASE_URL}/v1.0/device/currentData?appId=${appId}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+token },
+      body: JSON.stringify({ deviceSn: DEVICE_SN })
+    });
+    const data = await res.json();
+    console.log('Deye realtime:', data);
+    if (data.dataList || (data.data && data.data.dataList)) {
+      const list = data.dataList || data.data.dataList;
+      applyData(list);
+      updateBanner();
+    }
+  } catch(e) { console.warn('Realtime error:', e); }
+}
+
+// ── FETCH DAY STATS ──
+async function fetchDayStats() {
+  if (!await ensureToken()) return;
+  try {
+    const appId = localStorage.getItem('dy_appId') || DEYE_APP_ID;
+    const url = `${DEYE_BASE_URL}/v1.0/station/day?appId=${appId}`;
+    const now = new Date();
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+token },
+      body: JSON.stringify({
+        deviceSn: DEVICE_SN,
+        date: now.toISOString().split('T')[0]
+      })
+    });
+    const data = await res.json();
+    console.log('Deye day stats:', data);
+    if (data.generationPower !== undefined || (data.data)) {
+      applyDayStats(data.data || data);
+    }
+  } catch(e) { console.warn('Day stats error:', e); }
+}
+
+// ── MAP DATA ──
+function getVal(list, ...keys) {
+  for (const key of keys) {
+    const item = list.find(d => d.key===key || d.name===key);
+    if (item && item.value!=null) return parseFloat(item.value);
+  }
+  return null;
+}
+
+function applyData(list) {
+  const pv    = getVal(list,'Et_ge0','SolarPower','Pac','PVPower','generationPower') ?? 0;
+  const bat   = getVal(list,'B_left_cap','BatterySOC','SOC','batterySOC') ?? null;
+  const batP  = getVal(list,'B_P','BatteryPower','batteryPower') ?? 0;
+  const grid  = getVal(list,'PurchasedPower','GridPower','Grid_Power','purchasedPower') ?? 0;
+  const load  = getVal(list,'HomeLoadPower','LoadPower','Load_Power','useEnergy') ?? 0;
+  const temp  = getVal(list,'DCtoDC_Temp','Temp','InverterTemperature','temperature') ?? null;
+  const todPv = getVal(list,'Etdy_ge0','DailyProduction','dailyEnergy','generationTotal') ?? null;
+  const todLd = getVal(list,'Etdy_use0','DailyUsed','dailyUsed') ?? null;
+  const todGr = getVal(list,'Etdy_buy0','DailyBought','dailyBought') ?? null;
+  const todEx = getVal(list,'Etdy_sell0','DailySold','dailySold') ?? null;
+
+  render({ pv, bat, batP, grid, load, temp, todPv, todLd, todGr, todEx });
+}
+
+function applyDayStats(d) {
+  if (!d) return;
+  const todPv = d.generationPower || d.pvPower || d.solarEnergy || null;
+  const todLd = d.consumptionPower || d.loadPower || null;
+  const todGr = d.purchasedPower || d.gridImport || null;
+  const todEx = d.wirePower || d.gridExport || null;
+  if (todPv!==null) setText('today-pv', todPv.toFixed(1)+' kWh');
+  if (todLd!==null) setText('today-load', todLd.toFixed(1)+' kWh');
+  if (todGr!==null) setText('today-grid', todGr.toFixed(1)+' kWh');
+  if (todEx!==null) setText('today-exp',  todEx.toFixed(1)+' kWh');
+  if (todPv!==null) recalcFinancials({ todPv, todLd:todLd||0, todGr:todGr||0, todEx:todEx||0 });
+}
+
+// ── RENDER ──
+function setText(id, v) { const el=document.getElementById(id); if(el) el.textContent=v; }
+
+function render(s) {
+  setText('pv-power',   s.pv!=null   ? Math.round(s.pv).toLocaleString('pt')+' W'   : '— W');
+  setText('bat-pct',    s.bat!=null  ? s.bat.toFixed(0)+'%'                          : '—%');
+  setText('grid-power', s.grid!=null ? Math.round(Math.abs(s.grid)).toLocaleString('pt')+' W' : '— W');
+  setText('load-power', s.load!=null ? Math.round(s.load).toLocaleString('pt')+' W' : '— W');
+  setText('inv-temp',   s.temp!=null ? s.temp.toFixed(1)+'°C'                        : '—');
+  setText('c-pv',   s.pv!=null   ? (s.pv/1000).toFixed(2)        : '—');
+  setText('c-bat',  s.bat!=null  ? s.bat.toFixed(0)              : '—');
+  setText('c-grid', s.grid!=null ? Math.round(Math.abs(s.grid))  : '—');
+  setText('c-load', s.load!=null ? (s.load/1000).toFixed(2)      : '—');
+  if(s.bat!=null) document.getElementById('bat-bar').style.width = s.bat.toFixed(0)+'%';
+
+  // Grid label
+  if(s.grid!=null) {
+    const sub = s.grid < -50 ? '<span style="color:#A8E063">A exportar ↑</span>'
+              : s.grid >  50 ? '<span style="color:#FF6B6B">A importar ↓</span>'
+              : '<span style="color:#A8E063">Independente</span>';
+    const el = document.getElementById('c-grid-sub');
+    if(el) el.innerHTML = 'W · '+sub;
+  }
+  // Battery label
+  if(s.batP!=null) {
+    const sub = s.batP>50 ? `% · Carregando +${(s.batP/1000).toFixed(1)} kW`
+              : s.batP<-50 ? `% · Descarregando ${(Math.abs(s.batP)/1000).toFixed(1)} kW`
+              : '% · Standby';
+    setText('c-bat-sub', sub);
+  }
+  // Temperature
+  if(s.temp!=null) {
+    setText('inv-temp-big', s.temp.toFixed(1)+'°C');
+    document.getElementById('temp-bar').style.width = Math.min(100,(s.temp/100)*100)+'%';
+  }
+  // Daily totals
+  if(s.todPv!=null) { setText('today-pv',   s.todPv.toFixed(1)+' kWh'); }
+  if(s.todLd!=null) { setText('today-load', s.todLd.toFixed(1)+' kWh'); }
+  if(s.todGr!=null) { setText('today-grid', s.todGr.toFixed(1)+' kWh'); }
+  if(s.todEx!=null) { setText('today-exp',  s.todEx.toFixed(1)+' kWh'); }
+
+  if(s.todPv!=null) recalcFinancials({ todPv:s.todPv, todLd:s.todLd||0, todGr:s.todGr||0, todEx:s.todEx||0 });
+
+  // Visual cards
+  const h = new Date().getHours()+new Date().getMinutes()/60;
+  const sunRem = Math.max(0, 20.75-h);
+  setText('sun-remaining', sunRem>0 ? sunRem.toFixed(1)+'h' : '0h');
+  document.getElementById('sun-bar').style.width = Math.max(0,Math.min(100,(sunRem/14.25)*100))+'%';
+
+  if(s.bat!=null && s.load!=null && s.load>0) {
+    const usable = (s.bat/100)*15.92*0.85;
+    const nightL = Math.max(0.5,(s.load/1000)*0.6);
+    const auto   = usable/nightL;
+    setText('bat-autonomy', auto.toFixed(1)+'h');
+    document.getElementById('bat-auto-bar').style.width = Math.min(100,(auto/24)*100)+'%';
+    setText('bat-auto-sub', `Cap. útil: ${usable.toFixed(1)} kWh · Noite: ${nightL.toFixed(1)} kW`);
+  }
+
+  updateAlerts(s);
+}
+
+// ── FINANCIALS ──
+function recalcFinancials(d) {
+  const t = T();
+  const imp   = d.todGr  || 0;
+  const exp   = d.todEx  || 0;
+  const pv    = d.todPv  || 0;
+  const self  = Math.max(0, pv-exp);
+  const impPk = imp*0.55, impOff = imp*0.45;
+  const cost  = -(impPk*t.peak + impOff*t.off);
+  const rev   = exp*t.sell;
+  const sav   = self*t.peak;
+  const bal   = rev+sav+cost;
+  const f = (v,p='')=>p+v.toFixed(2)+' €';
+  const k = v=>v.toFixed(1)+' kWh';
+  setText('d-imp-kwh', k(imp)); setText('d-imp-sub', `Ponta: ${impPk.toFixed(2)} kWh · Vazio: ${impOff.toFixed(2)} kWh`);
+  setText('d-imp-cost', f(cost)); setText('d-exp-kwh', k(exp)); setText('d-exp-rev', f(rev,'+'));
+  setText('d-sav-kwh', k(self)); setText('d-sav-val', f(sav,'+')); 
+  setText('d-bal', (bal>=0?'+':'')+bal.toFixed(2)+' €');
+  setText('d-b-exp', f(rev,'+')); setText('d-b-sav', f(sav,'+')); setText('d-b-imp', f(cost));
+}
+
+function recalcAll() {
+  const pvEl = document.getElementById('today-pv');
+  if (pvEl && pvEl.textContent !== '—') {
+    recalcFinancials({
+      todPv:  parseFloat(pvEl.textContent)||0,
+      todEx:  parseFloat(document.getElementById('today-exp').textContent)||0,
+      todLd:  parseFloat(document.getElementById('today-load').textContent)||0,
+      todGr:  parseFloat(document.getElementById('today-grid').textContent)||0,
+    });
+  }
+}
+
+// ── ALERTS ──
+function updateAlerts(s) {
+  const t = new Date().toLocaleTimeString('pt-PT');
+  const items = [];
+  if(s.pv>100)  items.push({cls:'ok',  icon:'✅', title:'Inversor Deye operacional', sub:`${t}${s.temp!=null?' · '+s.temp.toFixed(1)+'°C':''}`});
+  if(s.bat!=null) {
+    const ch = s.batP>50;
+    items.push({cls:'ok', icon: ch?'🔋':'⚡', title: ch?'Bateria em carga':'Bateria estável', sub:`${t} · ${s.bat.toFixed(0)}%`});
+  }
+  items.push({cls:'info', icon:'📡', title:'Deye Cloud activa', sub:`${t} · SN ${DEVICE_SN}`});
+  if(s.temp!=null && s.temp>60) items.push({cls:'warn', icon:'⚠️', title:'Temperatura elevada', sub:`${t} · ${s.temp.toFixed(1)}°C`});
+  if(s.grid!=null && Math.abs(s.grid)<50) items.push({cls:'ok', icon:'☀️', title:'Independente da rede', sub:t});
+  document.getElementById('alerts-box').innerHTML = items.slice(0,5).map(a=>
+    `<div class="alert-item"><div class="alert-icon ${a.cls}">${a.icon}</div><div><div class="alert-title">${a.title}</div><div class="alert-time">${a.sub}</div></div></div>`
+  ).join('');
+}
+
+// ── UI HELPERS ──
+function setPill(mode) {
+  const pill = document.querySelector('.status-pill');
+  const span = document.getElementById('status-text');
+  if(mode==='api') {
+    span.textContent='ON-GRID · DADOS REAIS';
+    pill.style.cssText='display:flex;align-items:center;gap:8px;background:rgba(168,224,99,0.15);border:1px solid rgba(168,224,99,0.5);padding:8px 16px;border-radius:100px;font-family:JetBrains Mono,monospace;font-size:12px;color:var(--battery);transition:all 0.5s';
+  }
+}
+
+function setBanner(ok, msg) {
+  const b = document.getElementById('api-banner');
+  const bt = document.getElementById('banner-text');
+  if(ok) {
+    b.className='api-banner ok';
+    bt.textContent = msg||'Deye Cloud ligada — dados reais activos';
+    document.getElementById('banner-time').textContent='Actualizado: '+new Date().toLocaleTimeString('pt-PT');
+  } else {
+    b.className='api-banner';
+  }
+}
+
+function updateBanner() {
+  if(document.getElementById('api-banner').classList.contains('ok')) {
+    document.getElementById('banner-time').textContent='Actualizado: '+new Date().toLocaleTimeString('pt-PT');
+  }
+}
+
+// ── LIVE ──
+function startLive() {
+  if(liveTimer) clearInterval(liveTimer);
+  fetchRealtime();
+  fetchDayStats();
+  liveTimer = setInterval(()=>{ fetchRealtime(); fetchDayStats(); }, 30000);
+}
+
+// ── AUTO-INIT ──
+(async()=>{
+  const email = localStorage.getItem('dy_email');
+  const hash  = localStorage.getItem('dy_pwdHash');
+  if(email && hash) {
+    const appId  = localStorage.getItem('dy_appId')  || DEYE_APP_ID;
+    const secret = localStorage.getItem('dy_secret') || DEYE_APP_SECRET;
+    if(token && Date.now()<tokenExpiry) {
+      setPill('api'); setBanner(true); startLive();
+    } else {
+      const ok = await fetchToken(appId, secret, email, hash);
+      if(ok) startLive();
+    }
+  } else {
+    // Sem credenciais — mostra o modal automaticamente após 1s
+    setTimeout(showModal, 1000);
+  }
+})();
+
+// Sun timer
+setInterval(()=>{
+  const h=new Date().getHours()+new Date().getMinutes()/60;
+  const r=Math.max(0,20.75-h);
+  setText('sun-remaining', r>0?r.toFixed(1)+'h':'0h');
+  document.getElementById('sun-bar').style.width=Math.max(0,Math.min(100,(r/14.25)*100))+'%';
+},60000);
+
+// ── CHARTS ──
+const cs=document.createElement('script');
+cs.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
+cs.onload=buildCharts;
+document.head.appendChild(cs);
+
+const CD={color:'#5A6785',font:{family:'JetBrains Mono',size:10},grid:'rgba(255,255,255,0.04)'};
+
+function buildCharts(){
+  // 12h production chart
+  const lbs=[],pvD=[],ldD=[],grD=[];
+  const now=new Date();
+  for(let i=12;i>=0;i--){
+    const t=new Date(now-i*3600000);
+    lbs.push(t.getHours()+':00');
+    const h=t.getHours();
+    const sf=Math.max(0,Math.sin(Math.PI*(h-6)/14));
+    const pv=+(9.1*sf*(0.85+Math.random()*0.15)).toFixed(2);
+    const ld=+(2.5+Math.random()*2.5).toFixed(2);
+    pvD.push(pv); ldD.push(ld); grD.push(+(Math.max(0,ld-pv)*(Math.random()<0.3?1:0)).toFixed(2));
+  }
+  new Chart(document.getElementById('myChart'),{type:'line',data:{labels:lbs,datasets:[
+    {label:'Solar kW',data:pvD,borderColor:'#F5A623',backgroundColor:'rgba(245,166,35,0.08)',fill:true,tension:0.4,pointRadius:3,pointBackgroundColor:'#F5A623',borderWidth:2},
+    {label:'Consumo kW',data:ldD,borderColor:'#C471ED',backgroundColor:'rgba(196,113,237,0.06)',fill:true,tension:0.4,pointRadius:3,pointBackgroundColor:'#C471ED',borderWidth:2},
+    {label:'Rede kW',data:grD,borderColor:'#4ECDC4',backgroundColor:'rgba(78,205,196,0.08)',fill:true,tension:0.4,pointRadius:3,pointBackgroundColor:'#4ECDC4',borderWidth:2,borderDash:[5,3]}
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CD.color,font:CD.font,boxWidth:12}}},scales:{x:{ticks:{color:CD.color,font:CD.font},grid:{color:CD.grid}},y:{ticks:{color:CD.color,font:CD.font,callback:v=>v+' kW'},grid:{color:CD.grid},min:0}}}});
+
+  // Day pie
+  new Chart(document.getElementById('dayPieChart'),{type:'doughnut',data:{labels:['Autoconsumo','Exportado','Da Rede'],datasets:[{data:[60,25,15],backgroundColor:['rgba(255,209,102,0.8)','rgba(168,224,99,0.8)','rgba(255,107,107,0.7)'],borderColor:'rgba(255,255,255,0.05)',borderWidth:2,hoverOffset:6}]},options:{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{position:'right',labels:{color:CD.color,font:CD.font,boxWidth:12,padding:10}}}}});
+
+  // Day cost
+  const t2=T(); const hl=[],cb=[],sb=[];
+  for(let h=6;h<=20;h++){
+    hl.push(h+':00');
+    const isPk=(h>=9&&h<=12)||(h>=18&&h<=21);
+    const tr=isPk?t2.peak:t2.off;
+    const sf=Math.max(0,Math.sin(Math.PI*(h-6)/14));
+    const pv=9.1*sf*(0.85+Math.random()*0.15), ld=2.5+Math.random()*2.5;
+    const imp=Math.max(0,ld-pv), exp=Math.max(0,pv-ld);
+    cb.push(imp>0?+(-(imp*tr)).toFixed(3):0);
+    sb.push(+(exp>0?Math.min(pv,ld)*tr+exp*t2.sell:pv*tr).toFixed(3));
+  }
+  new Chart(document.getElementById('dayCostChart'),{type:'bar',data:{labels:hl,datasets:[
+    {label:'Poupança €',data:sb,backgroundColor:'rgba(168,224,99,0.75)',borderRadius:4},
+    {label:'Custo rede €',data:cb,backgroundColor:'rgba(255,107,107,0.75)',borderRadius:4}
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CD.color,font:CD.font,boxWidth:10}}},scales:{x:{ticks:{color:CD.color,font:CD.font},grid:{color:CD.grid}},y:{ticks:{color:CD.color,font:CD.font,callback:v=>v.toFixed(2)+'€'},grid:{color:CD.grid}}}}});
+
+  // Month charts + financials (simulated until real month API)
+  const t=T();
+  const mDays=Array.from({length:20},(_,i)=>{
+    const pv=+(35+Math.random()*15).toFixed(1), ld=+(12+Math.random()*10).toFixed(1);
+    const self=+Math.min(pv*0.5,ld*0.9).toFixed(1), exp=+(pv-self).toFixed(1), imp=+Math.max(0,ld-self).toFixed(1);
+    return{d:i+1,pv,ld,self,exp,imp,iPk:+(imp*0.55).toFixed(2),iOff:+(imp*0.45).toFixed(2)};
+  });
+  const mL=mDays.map(d=>'D'+d.d);
+  new Chart(document.getElementById('monthBarChart'),{type:'bar',data:{labels:mL,datasets:[
+    {label:'Solar',data:mDays.map(d=>d.pv),backgroundColor:'rgba(245,166,35,0.7)',borderRadius:3,stack:'a'},
+    {label:'Consumo',data:mDays.map(d=>-d.ld),backgroundColor:'rgba(196,113,237,0.6)',borderRadius:3,stack:'b'},
+    {label:'Da Rede',data:mDays.map(d=>-d.imp),backgroundColor:'rgba(255,107,107,0.6)',borderRadius:3,stack:'b'},
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CD.color,font:CD.font,boxWidth:10}}},scales:{x:{ticks:{color:CD.color,font:{family:'JetBrains Mono',size:9}},grid:{color:CD.grid}},y:{ticks:{color:CD.color,font:CD.font,callback:v=>Math.abs(v)},grid:{color:CD.grid}}}}});
+  const bpd=mDays.map(d=>+((d.exp*t.sell+d.self*t.peak-(d.iPk*t.peak+d.iOff*t.off))).toFixed(2));
+  new Chart(document.getElementById('monthCostChart'),{type:'line',data:{labels:mL,datasets:[{label:'Saldo €/dia',data:bpd,borderColor:'#FFD166',backgroundColor:'rgba(255,209,102,0.08)',fill:true,tension:0.3,pointRadius:3,pointBackgroundColor:'#FFD166',borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CD.color,font:CD.font,boxWidth:12}}},scales:{x:{ticks:{color:CD.color,font:{family:'JetBrains Mono',size:9}},grid:{color:CD.grid}},y:{ticks:{color:CD.color,font:CD.font,callback:v=>v.toFixed(2)+'€'},grid:{color:CD.grid}}}}});
+
+  const m=mDays.reduce((a,d)=>({imp:a.imp+d.imp,exp:a.exp+d.exp,self:a.self+d.self,iPk:a.iPk+d.iPk,iOff:a.iOff+d.iOff}),{imp:0,exp:0,self:0,iPk:0,iOff:0});
+  const mC=-(m.iPk*t.peak+m.iOff*t.off+t.pot), mR=m.exp*t.sell, mS=m.self*t.peak, mB=mR+mS+mC;
+  const f2=(v,p='')=>p+v.toFixed(2)+' €', k2=v=>v.toFixed(1)+' kWh';
+  setText('m-imp-kwh',k2(m.imp)); setText('m-imp-sub',`Ponta: ${m.iPk.toFixed(1)} kWh · Vazio: ${m.iOff.toFixed(1)} kWh`);
+  setText('m-imp-cost',f2(mC)); setText('m-exp-kwh',k2(m.exp)); setText('m-exp-rev',f2(mR,'+'));
+  setText('m-sav-kwh',k2(m.self)); setText('m-sav-val',f2(mS,'+')); setText('m-bal',(mB>=0?'+':'')+mB.toFixed(2)+' €');
+  setText('m-b-exp',f2(mR,'+')); setText('m-b-sav',f2(mS,'+')); setText('m-b-imp',f2(mC));
+}
+</script>
+</body>
+</html>
+99,0.3); padding:8px 16px; border-radius:100px; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--battery); transition:all 0.5s; }
   .dot { width:8px; height:8px; border-radius:50%; background:var(--battery); animation:blink 2s infinite; }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
   .header-time { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted); text-align:right; }
