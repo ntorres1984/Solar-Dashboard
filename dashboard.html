@@ -445,17 +445,21 @@ async function fetchRealtime() {
   try {
     const appId = localStorage.getItem('dy_appId') || DEYE_APP_ID;
     // Deye Cloud device data endpoint
-    const url = `${PROXY_URL}?target=${encodeURIComponent(DEYE_BASE_URL+'/v1.0/device/latest?appId='+appId)}`;
+    const url = `${PROXY_URL}?target=${encodeURIComponent(DEYE_BASE_URL+'/v1.0/device/getCurrentDataList?appId='+appId)}`;
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+token },
       body: JSON.stringify({ deviceSnList: [DEVICE_SN] })
     });
     const data = await res.json();
-    console.log('Deye realtime:', data);
-    if (data.dataList || (data.data && data.data.dataList)) {
-      const list = data.dataList || data.data.dataList;
-      applyData(list);
+    console.log('Deye realtime:', JSON.stringify(data).substring(0,500));
+    // Response has deviceDataList array, each with dataList
+    const deviceList = data.deviceDataList || (data.data && data.data.deviceDataList) || [];
+    if (deviceList.length > 0 && deviceList[0].dataList) {
+      applyData(deviceList[0].dataList);
+      updateBanner();
+    } else if (data.dataList) {
+      applyData(data.dataList);
       updateBanner();
     }
   } catch(e) { console.warn('Realtime error:', e); }
@@ -492,6 +496,7 @@ async function fetchDayStats() {
   try {
     const appId = localStorage.getItem('dy_appId') || DEYE_APP_ID;
     const url = `${PROXY_URL}?target=${encodeURIComponent(DEYE_BASE_URL+'/v1.0/station/latest?appId='+appId)}`;
+    // Try station/list first to get stationId if not stored
     const now = new Date();
     const res = await fetch(url, {
       method: 'POST',
