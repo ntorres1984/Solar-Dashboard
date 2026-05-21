@@ -445,11 +445,11 @@ async function fetchRealtime() {
   try {
     const appId = localStorage.getItem('dy_appId') || DEYE_APP_ID;
     // Deye Cloud device data endpoint
-    const url = `${PROXY_URL}?target=${encodeURIComponent(DEYE_BASE_URL+'/v1.0/device/currentData?appId='+appId)}`;
+    const url = `${PROXY_URL}?target=${encodeURIComponent(DEYE_BASE_URL+'/v1.0/device/latest?appId='+appId)}`;
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+token },
-      body: JSON.stringify({ deviceSn: DEVICE_SN })
+      body: JSON.stringify({ deviceSnList: [DEVICE_SN] })
     });
     const data = await res.json();
     console.log('Deye realtime:', data);
@@ -461,20 +461,42 @@ async function fetchRealtime() {
   } catch(e) { console.warn('Realtime error:', e); }
 }
 
+// ── FETCH STATION LIST (to get stationId) ──
+async function fetchStationList() {
+  if (!await ensureToken()) return;
+  try {
+    const appId = localStorage.getItem('dy_appId') || DEYE_APP_ID;
+    const url = `${PROXY_URL}?target=${encodeURIComponent(DEYE_BASE_URL+'/v1.0/station/list?appId='+appId)}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+token },
+      body: JSON.stringify({ page: { pageSize: 10, pageIndex: 1 } })
+    });
+    const data = await res.json();
+    console.log('Deye station list:', JSON.stringify(data));
+    // Extract stationId if available
+    const stations = data.stationList || data.infos || (data.data && data.data.stationList) || [];
+    if (stations.length > 0) {
+      const sid = stations[0].id || stations[0].stationId;
+      if (sid) {
+        console.log('Station ID found:', sid);
+        localStorage.setItem('dy_stationId', sid);
+      }
+    }
+  } catch(e) { console.warn('Station list error:', e); }
+}
+
 // ── FETCH DAY STATS ──
 async function fetchDayStats() {
   if (!await ensureToken()) return;
   try {
     const appId = localStorage.getItem('dy_appId') || DEYE_APP_ID;
-    const url = `${PROXY_URL}?target=${encodeURIComponent(DEYE_BASE_URL+'/v1.0/station/day?appId='+appId)}`;
+    const url = `${PROXY_URL}?target=${encodeURIComponent(DEYE_BASE_URL+'/v1.0/station/latest?appId='+appId)}`;
     const now = new Date();
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+token },
-      body: JSON.stringify({
-        deviceSn: DEVICE_SN,
-        date: now.toISOString().split('T')[0]
-      })
+      body: JSON.stringify({ stationId: DEVICE_SN })
     });
     const data = await res.json();
     console.log('Deye day stats:', data);
@@ -663,6 +685,7 @@ function updateBanner() {
 // ── LIVE ──
 function startLive() {
   if(liveTimer) clearInterval(liveTimer);
+  fetchStationList();
   fetchRealtime();
   fetchDayStats();
   liveTimer = setInterval(()=>{ fetchRealtime(); fetchDayStats(); }, 30000);
