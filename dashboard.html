@@ -302,7 +302,8 @@ const DEYE_APP_SECRET = 'fda694b18c04151a4443e8fde8b48033';
 const DEYE_BASE_URL   = 'https://eu1-developer.deyecloud.com';
 const PROXY_URL      = 'https://lingering-darkness-583a.nuno-jorge-torres.workers.dev';
 // Device SNs (ajustar se necessário)
-const DEVICE_SN = '2509094105';
+const DEVICE_SN = '2509094105'; // inversor
+const LOGGER_SN  = '3584353340'; // logger (datalogger)
 const LOGGER_SN = '3584353340';
 
 let token       = localStorage.getItem('dy_token') || '';
@@ -449,7 +450,7 @@ async function fetchRealtime() {
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+token },
-      body: JSON.stringify({ deviceSnList: [DEVICE_SN] })
+      body: JSON.stringify({ deviceSnList: [LOGGER_SN] })
     });
     const data = await res.json();
     console.log('Deye realtime:', JSON.stringify(data).substring(0,500));
