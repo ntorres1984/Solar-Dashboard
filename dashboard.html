@@ -625,9 +625,9 @@ function accumulateEnergy(pvW, loadW, wireW, batW) {
   if (dt > 0 && dt < 0.083) {
     if (pvW   > 10)  _acc.pv += (pvW/1000)            * dt;  // solar produzido
     if (loadW > 10)  _acc.ld += (loadW/1000)           * dt;  // consumo casa
-    // wirePower Deye EU: positivo=exportar, negativo=importar
-    if (wireW > 50)  _acc.ex += (wireW/1000)           * dt;  // exportado para rede
-    if (wireW < -50) _acc.gr += (Math.abs(wireW)/1000) * dt;  // importado da rede
+    // wirePower Deye EU: negativo=exportar, positivo=importar (confirmado)
+    if (wireW < -50) _acc.ex += (Math.abs(wireW)/1000) * dt;  // exportado para rede
+    if (wireW > 50)  _acc.gr += (wireW/1000)           * dt;  // importado da rede
     // batPower: positivo=carregar, negativo=descarregar (confirmar com dados reais)
     if (batW  > 50)  _acc.bc += (batW/1000)            * dt;  // carregado bateria
     if (batW  < -50) _acc.bd += (Math.abs(batW)/1000)  * dt;  // descarregado bateria
@@ -781,8 +781,8 @@ function render(src, pv, load, grid, bat, batP, temp) {
   if (pv   !== null) { st('f-pv',   Math.round(pv).toLocaleString('pt')+' W'); st('c-pv', (pv/1000).toFixed(2)); }
   if (bat  !== null) { st('f-bat',  bat.toFixed(0)+'%'); st('c-bat', bat.toFixed(0)); $('batbar').style.width = bat+'%'; }
   if (grid !== null) { st('f-grid', Math.round(Math.abs(grid)).toLocaleString('pt')+' W'); st('c-grid', Math.round(Math.abs(grid)));
-    // wirePower Deye EU: positivo=exportar, negativo=importar
-    $('c-grid-s').innerHTML = grid > 50 ? '<span style="color:#A8E063">A exportar ↑</span>' : grid < -50 ? '<span style="color:#FF6B6B">A importar ↓</span>' : '<span style="color:#A8E063">Independente</span>'; }
+    // wirePower Deye EU: negativo=exportar, positivo=importar (confirmado com dados reais)
+    $('c-grid-s').innerHTML = grid < -50 ? '<span style="color:#A8E063">A exportar ↑</span>' : grid > 50 ? '<span style="color:#FF6B6B">A importar ↓</span>' : '<span style="color:#A8E063">Independente</span>'; }
   if (load !== null) { st('f-load', Math.round(load).toLocaleString('pt')+' W'); st('c-load', (load/1000).toFixed(2)); }
   if (temp !== null) { st('f-temp', temp.toFixed(1)+'°C'); st('temp-big', temp.toFixed(1)+'°C'); $('temp-bar').style.width = Math.min(100,(temp/100)*100)+'%'; }
   if (batP !== null) { st('c-bat-s', batP>50?`% · Carregando +${(batP/1000).toFixed(1)} kW` : batP<-50?`% · Descarregando ${(Math.abs(batP)/1000).toFixed(1)} kW`:'% · Standby'); }
@@ -913,12 +913,21 @@ function recalcDay(pv, ld, gr, ex) {
 }
 
 function recalc() {
-  const pv = parseFloat($('t-pv').textContent) || 0;
-  const ex = parseFloat($('t-ex').textContent) || 0;
-  const gr = parseFloat($('t-gr').textContent) || 0;
-  const ld = parseFloat($('t-ld').textContent) || 0;
-  if (pv > 0) recalcDay(pv, ld, gr, ex);
+  // Usar dados em memória (_todayData) ou ler dos elementos
+  const d  = window._todayData;
+  const pv = d?.pv || parseFloat($('t-pv').textContent) || 0;
+  const ex = d?.ex || parseFloat($('t-ex').textContent) || 0;
+  const gr = d?.gr || parseFloat($('t-gr').textContent) || 0;
+  const ld = d?.ld || parseFloat($('t-ld').textContent) || 0;
+  if (pv > 0 || gr > 0) {
+    recalcDay(pv, ld, gr, ex);
+    updateDayCharts(pv, ld, gr, ex);
+  }
   buildMonthCharts();
+  // Feedback visual
+  const btn = $('tbtn');
+  btn.textContent = '✅ TARIFAS ACTUALIZADAS';
+  setTimeout(() => { btn.textContent = '↻ ACTUALIZAR TARIFAS'; }, 2000);
 }
 
 // ═══════════════════════════════════════════
