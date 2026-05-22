@@ -456,71 +456,57 @@ async function fetchAll() {
   if (!await ensureToken()) return;
   const appId = localStorage.getItem('dy_appId') || CFG.appId;
 
-  // ── STATION LIST: try different body formats ──
+  // ── STATION LIST (body vazio funciona) ──
   let sid = localStorage.getItem('dy_stationId') || '';
   if (!sid) {
-    for (const body of [{}, { pageSize:10, pageIndex:1 }, { page:{pageSize:10,pageIndex:1} }]) {
-      try {
-        const r = await api('/v1.0/station/list?appId=' + appId, body);
-        console.log('Station list body=' + JSON.stringify(body) + ':', JSON.stringify(r).substring(0,300));
-        if (r && !r.msg?.includes('invalid')) {
-          const list = r.stationList || r.stations || (r.data && r.data.stationList) || [];
-          if (list.length > 0) {
-            sid = String(list[0].id || list[0].stationId || list[0].plantId || '');
-            if (sid) { localStorage.setItem('dy_stationId', sid); break; }
-          }
-        }
-      } catch(e) {}
-    }
-  }
-
-  // ── STATION LATEST ──
-  if (sid) {
-    for (const body of [{ stationId: sid }, { stationId: parseInt(sid) }, { id: sid }]) {
-      try {
-        const r = await api('/v1.0/station/latest?appId=' + appId, body);
-        console.log('Station latest body=' + JSON.stringify(body) + ':', JSON.stringify(r).substring(0,400));
-        if (r && r.success !== false && !r.error) { applyStation(r); break; }
-      } catch(e) {}
-    }
-  }
-
-  // ── DEVICE DATA: try all known endpoints ──
-  const eps = [
-    ['/v1.0/device/latest?appId=' + appId,        { deviceSnList:[CFG.devSn] }],
-    ['/v1.0/device/latest?appId=' + appId,        { deviceSn:CFG.devSn }],
-    ['/v1.0/device/currentData?appId=' + appId,   { deviceSn:CFG.devSn }],
-    ['/v1.0/device/measurePoints?appId=' + appId, { deviceSn:CFG.devSn }],
-    ['/v1.0/device/history?appId=' + appId,       { deviceSn:CFG.devSn, timeType:1 }],
-  ];
-  for (const [ep, body] of eps) {
     try {
-      const r = await api(ep, body);
-      const epName = ep.split('/').pop().split('?')[0];
-      console.log('Device ' + epName + ':', JSON.stringify(r).substring(0,400));
-      if (r && !r.error && r.status !== 404 && r.success !== false) {
-        const items = (r.deviceDataList?.[0]?.dataList) || r.dataList || [];
-        if (Array.isArray(items) && items.length > 0) { applyDeviceData(items); break; }
+      const r = await api('/v1.0/station/list?appId=' + appId, {});
+      const list = r.stationList || [];
+      if (list.length > 0) {
+        sid = String(list[0].id || list[0].stationId || '');
+        if (sid) localStorage.setItem('dy_stationId', sid);
       }
-    } catch(e) {}
+    } catch(e) { console.warn('Station list error:', e); }
   }
+
+  // ── STATION LATEST (tem dados em tempo real) ──
+  if (sid) {
+    try {
+      const r = await api('/v1.0/station/latest?appId=' + appId, { stationId: sid });
+      if (r && r.success !== false) applyStation(r);
+    } catch(e) { console.warn('Station latest error:', e); }
+  }
+
+  // ── DEVICE MEASURE POINTS (tem dados detalhados do inversor) ──
+  try {
+    const r = await api('/v1.0/device/measurePoints?appId=' + appId, { deviceSn: CFG.devSn });
+    if (r && r.success !== false && r.measurePoints) {
+      applyMeasurePoints(r.measurePoints);
+    }
+  } catch(e) { console.warn('measurePoints error:', e); }
 
   bannerTime();
 }
 
-function applyStation(d) {
-  // Tenta mapeamento directo de campos conhecidos da Deye Cloud
-  const pv   = num(d.generationPower || d.pvPower);
-  const load = num(d.usePower        || d.loadPower || d.consumptionPower);
-  const grid = num(d.purchasedPower  || d.gridPower || d.buyPower);
-  const bat  = num(d.batterySoc      || d.batterySOC || d.soc);
-  const batP = num(d.chargePower     || d.batteryPower);
-  const todPv= num(d.generationValue || d.pvEnergy  || d.dailyGeneration);
-  const todLd= num(d.useValue        || d.loadEnergy);
-  const todGr= num(d.buyValue        || d.purchasedValue);
-  const todEx= num(d.sellValue       || d.soldValue || d.wireValue);
+function applyMeasurePoints(mp) {
+  // measurePoints is an array of {name, unit} — it's just metadata, not values
+  // The actual values come from station/latest
+  console.log('MeasurePoints available:', mp.map(m=>m.name).join(', '));
+}
 
-  if (pv   !== null) render('pv',   pv,   load, grid, bat, batP, null);
+function applyStation(d) {
+  // Campos confirmados pela API Deye Cloud EU (station/latest)
+  const pv   = num(d.generationPower);                          // W - potência solar
+  const load = num(d.usePower        || d.loadPower);           // W - consumo
+  const grid = num(d.gridPower       || d.purchasedPower);      // W - rede (+ import, - export)
+  const bat  = num(d.batterySOC      || d.batterySoc);          // % - bateria
+  const batP = num(d.chargePower     || d.batteryPower);        // W - carga/descarga bat
+  const todPv= num(d.generationValue || d.dailyGeneration);     // kWh - produção hoje
+  const todLd= num(d.useValue        || d.dailyUse);            // kWh - consumo hoje
+  const todGr= num(d.buyValue        || d.dailyBuy);            // kWh - comprado rede hoje
+  const todEx= num(d.wireValue       || d.sellValue);           // kWh - vendido hoje
+
+  render('st', pv, load, grid, bat, batP, null);
   if (todPv !== null) renderDay(todPv, todLd, todGr, todEx);
 }
 
