@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt">
 <head>
@@ -313,6 +314,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:24p
     </div>
     <div id="mstatus" style="margin-top:14px;font-family:'JetBrains Mono',monospace;font-size:12px;min-height:18px;color:#4ECDC4;word-break:break-all;line-height:1.5"></div>
     <button id="m-connect" style="margin-top:18px;width:100%;background:linear-gradient(135deg,rgba(78,205,196,0.25),rgba(78,205,196,0.05));border:1px solid rgba(78,205,196,0.5);color:#4ECDC4;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;padding:13px;border-radius:12px;cursor:pointer;letter-spacing:2px">⚡ LIGAR E GUARDAR</button>
+    <button id="m-diag" style="margin-top:7px;width:100%;background:transparent;border:1px solid rgba(78,205,196,0.2);color:rgba(78,205,196,0.6);font-family:'JetBrains Mono',monospace;font-size:11px;padding:9px;border-radius:10px;cursor:pointer">🔍 DIAGNÓSTICO (testar endpoints)</button>
     <button id="m-clear" style="margin-top:7px;width:100%;background:transparent;border:1px solid rgba(255,107,107,0.3);color:rgba(255,107,107,0.7);font-family:'JetBrains Mono',monospace;font-size:11px;padding:9px;border-radius:10px;cursor:pointer">🗑 Limpar credenciais</button>
   </div>
 </div>
@@ -405,9 +407,87 @@ function mstat(msg, c) { $('mstatus').textContent = msg; $('mstatus').style.colo
 $('cfg-btn').onclick  = openModal;
 $('modal-x').onclick  = closeModal;
 $('m-clear').onclick  = () => {
-  ['dy_appId','dy_secret','dy_email','dy_pwdHash','dy_token','dy_token_exp','dy_stationId'].forEach(k => localStorage.removeItem(k));
+  ['dy_appId','dy_secret','dy_email','dy_pwdHash','dy_token','dy_token_exp','dy_stationId','dy_uid'].forEach(k => localStorage.removeItem(k));
   token = ''; mstat('✅ Credenciais removidas','ok');
   banner(false);
+};
+
+$('m-diag').onclick = async () => {
+  const id  = $('m-id').value.trim()  || CFG.appId;
+  const sec = $('m-sec').value.trim() || CFG.secret;
+  const em  = $('m-email').value.trim();
+  const pw  = $('m-pwd').value;
+  const tok = localStorage.getItem('dy_token') || token;
+
+  mstat('🔍 A correr diagnóstico...', 'info');
+  let report = '';
+
+  // 1. Verificar token
+  if (!tok) {
+    report += '❌ Sem token — faz login primeiro\n';
+    mstat(report, 'err'); return;
+  }
+  report += `✅ Token presente (${tok.substring(0,20)}...)\n`;
+
+  // 2. Testar station/list
+  try {
+    const url = CFG.proxy + '?target=' + encodeURIComponent(CFG.baseUrl + '/v1.0/station/list?appId=' + id);
+    const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok}, body:'{}' });
+    const d = await r.json();
+    const sid = localStorage.getItem('dy_stationId') || '';
+    report += `📡 station/list: code=${d.code||d.status||'?'} stationId=${sid||'não encontrado'}\n`;
+    if (!sid) report += `   ⚠️ Resposta: ${JSON.stringify(d).substring(0,120)}\n`;
+  } catch(e) { report += `❌ station/list: ${e.message}\n`; }
+
+  // 3. Testar station/latest
+  const sid2 = localStorage.getItem('dy_stationId');
+  if (sid2) {
+    try {
+      const url = CFG.proxy + '?target=' + encodeURIComponent(CFG.baseUrl + '/v1.0/station/latest?appId=' + id);
+      const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok}, body: JSON.stringify({stationId:sid2}) });
+      const d = await r.json();
+      const dat = d.data || d;
+      report += `⚡ station/latest: code=${d.code||'?'} pv=${dat.generationPower??'?'}W bat=${dat.batterySOC??dat.batterySoc??'?'}%\n`;
+    } catch(e) { report += `❌ station/latest: ${e.message}\n`; }
+
+    // 4. Testar device/latest (devSn) - tem os kWh diários reais
+    try {
+      const url4 = CFG.proxy + '?target=' + encodeURIComponent(CFG.baseUrl + '/v1.0/device/latest?appId=' + id);
+      const r4 = await fetch(url4, { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok}, body: JSON.stringify({deviceSn:CFG.devSn}) });
+      const d4 = await r4.json();
+      const list4 = d4.dataList || d4.data?.dataList || d4.data || [];
+      const arr4 = Array.isArray(list4) ? list4 : [];
+      const etdy = arr4.find(x => x.key==='Etdy_ge0' || x.key==='DailyProduction');
+      report += `🔋 device/latest(devSn): code=${d4.code||d4.status||'?'} items=${arr4.length} Etdy_ge0=${etdy?.value??'não encontrado'}\n`;
+      if (arr4.length === 0) report += `   ⚠️ Resposta raw: ${JSON.stringify(d4).substring(0,150)}\n`;
+    } catch(e) { report += `❌ device/latest(devSn): ${e.message}\n`; }
+
+    // 5. Testar device/latest (logSn) - logger
+    try {
+      const url5 = CFG.proxy + '?target=' + encodeURIComponent(CFG.baseUrl + '/v1.0/device/latest?appId=' + id);
+      const r5 = await fetch(url5, { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok}, body: JSON.stringify({deviceSn:CFG.logSn}) });
+      const d5 = await r5.json();
+      const list5 = d5.dataList || d5.data?.dataList || d5.data || [];
+      const arr5 = Array.isArray(list5) ? list5 : [];
+      report += `📡 device/latest(logSn): code=${d5.code||d5.status||'?'} items=${arr5.length}\n`;
+      if (arr5.length === 0) report += `   ⚠️ Resposta raw: ${JSON.stringify(d5).substring(0,150)}\n`;
+    } catch(e) { report += `❌ device/latest(logSn): ${e.message}\n`; }
+  } else {
+    report += '⚠️ Sem stationId — não foi possível testar todos os endpoints\n';
+    // Mesmo sem stationId, testa device/latest
+    try {
+      const url4 = CFG.proxy + '?target=' + encodeURIComponent(CFG.baseUrl + '/v1.0/device/latest?appId=' + id);
+      const r4 = await fetch(url4, { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok}, body: JSON.stringify({deviceSn:CFG.devSn}) });
+      const d4 = await r4.json();
+      const list4 = d4.dataList || d4.data?.dataList || d4.data || [];
+      const arr4 = Array.isArray(list4) ? list4 : [];
+      report += `🔋 device/latest(devSn): code=${d4.code||d4.status||'?'} items=${arr4.length}\n`;
+      if (arr4.length === 0) report += `   ⚠️ Raw: ${JSON.stringify(d4).substring(0,150)}\n`;
+    } catch(e) { report += `❌ device/latest(devSn): ${e.message}\n`; }
+  }
+
+  $('mstatus').style.whiteSpace = 'pre';
+  mstat(report, 'info');
 };
 $('m-connect').onclick = async () => {
   const id  = $('m-id').value.trim();
@@ -440,24 +520,36 @@ async function getToken(appId, secret, email, pwdHash) {
       body: JSON.stringify({ appSecret: secret, email, password: pwdHash })
     });
     const d = await r.json();
-    console.log('Token response:', d);
-    const tok = d.accessToken || d.access_token || (d.data && (d.data.accessToken || d.data.access_token));
+    console.log('[DY] Token response:', JSON.stringify(d).substring(0, 600));
+
+    // A API Deye EU devolve: { code:'1000000', data:{ accessToken, refreshToken, uid, expiresIn, ... } }
+    // Mas também pode devolver: { accessToken, ... } ou { success:true, accessToken, ... }
+    const data = d.data || d;
+    const tok  = data.accessToken || data.access_token || d.accessToken || d.access_token;
+    const exp  = data.expiresIn   || data.expires_in   || d.expiresIn   || d.expires_in || 5183999;
+
     if (tok) {
       token    = tok;
-      tokenExp = Date.now() + ((d.expiresIn || d.expires_in || 5183999) * 1000);
-      localStorage.setItem('dy_token',   token);
+      tokenExp = Date.now() + (exp * 1000);
+      localStorage.setItem('dy_token',     token);
       localStorage.setItem('dy_token_exp', String(tokenExp));
-      mstat('✅ Ligado!', 'ok');
+      // Guardar uid se disponível (pode ser necessário nalguns endpoints)
+      const uid = data.uid || d.uid;
+      if (uid) localStorage.setItem('dy_uid', String(uid));
+      mstat('✅ Ligado! Token válido por ' + Math.round(exp/3600) + 'h', 'ok');
       setPill('ON-GRID · DADOS REAIS', true);
       banner(true);
       return true;
     } else {
-      const err = d.msg || d.message || JSON.stringify(d);
+      // Mostrar erro completo no modal para debug
+      const err = d.msg || d.message || d.error || JSON.stringify(d);
       mstat('❌ ' + err, 'err');
+      console.error('[DY] Token sem accessToken. Resposta completa:', d);
       return false;
     }
   } catch(e) {
     mstat('❌ Erro de rede: ' + e.message, 'err');
+    console.error('[DY] getToken network error:', e);
     return false;
   }
 }
@@ -478,70 +570,88 @@ async function ensureToken() {
 async function fetchAll() {
   if (!await ensureToken()) return;
   const appId = localStorage.getItem('dy_appId') || CFG.appId;
+  const devSn = CFG.devSn;
+  const logSn = CFG.logSn;
 
-  // ── STATION LIST (body vazio funciona) ──
+  // ── STATION LIST (descobrir stationId — só uma vez) ──
   let sid = localStorage.getItem('dy_stationId') || '';
   if (!sid) {
     try {
       const r = await api('/v1.0/station/list?appId=' + appId, {});
-      const list = r.stationList || [];
-      if (list.length > 0) {
-        sid = String(list[0].id || list[0].stationId || '');
-        if (sid) localStorage.setItem('dy_stationId', sid);
+      console.log('[DY] station/list:', JSON.stringify(r).substring(0, 600));
+      const raw = r.stationList || r.data?.stationList || r.data || [];
+      const arr = Array.isArray(raw) ? raw : [];
+      if (arr.length > 0) {
+        sid = String(arr[0].id || arr[0].stationId || arr[0].station_id || '');
+        if (sid) { localStorage.setItem('dy_stationId', sid); console.log('[DY] stationId:', sid); }
       }
-    } catch(e) { console.warn('Station list error:', e); }
+    } catch(e) { console.warn('[DY] station/list error:', e); }
   }
 
-  // ── STATION LATEST (tem dados em tempo real) ──
+  // ── STATION LATEST (potência em tempo real + totais via station) ──
   if (sid) {
     try {
       const r = await api('/v1.0/station/latest?appId=' + appId, { stationId: sid });
-      if (r && r.success !== false) applyStation(r);
-    } catch(e) { console.warn('Station latest error:', e); }
+      console.log('[DY] station/latest full:', JSON.stringify(r).substring(0, 1000));
+      if (r && (r.code === '1000000' || (!r.error && r.success !== false))) {
+        applyStation(r);
+      }
+    } catch(e) { console.warn('[DY] station/latest error:', e); }
   }
 
-  // ── STATION DAY (totais diários) ──
-  if (sid) {
+  // ── DEVICE LATEST (totais diários reais: Etdy_ge0, Etdy_use0, Etdy_buy0, Etdy_sell0) ──
+  // O /station/day e /station/energy retornam 404 na API EU.
+  // Os kWh diários reais estão no /device/latest via dataList com chaves Etdy_*.
+  const sns = [devSn, logSn].filter(Boolean);
+  for (const sn of sns) {
     try {
-      const now = new Date();
-      const startTs = Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000);
-      // Try /v1.0/station/day endpoint
-      const r = await api('/v1.0/station/day?appId=' + appId, {
-        stationId: sid,
-        time: now.toISOString().split('T')[0]
-      });
-      console.log('Station day:', JSON.stringify(r).substring(0, 400));
-      if (r && r.success !== false && !r.msg?.includes('invalid')) {
-        const todPv = num(r.generationValue || r.pvValue);
-        const todLd = num(r.consumptionValue || r.useValue);
-        const todGr = num(r.buyValue || r.purchaseValue);
-        const todEx = num(r.sellValue || r.wireValue);
-        if (todPv !== null && todPv > 0) renderDay(todPv, todLd, todGr, todEx);
-        // Store for weekly/monthly calculations
-        window._todayData = { pv: todPv||0, ld: todLd||0, gr: todGr||0, ex: todEx||0 };
+      const r = await api('/v1.0/device/latest?appId=' + appId, { deviceSn: sn });
+      console.log('[DY] device/latest(' + sn + '):', JSON.stringify(r).substring(0, 1000));
+      if (r && (r.code === '1000000' || (!r.error && r.success !== false))) {
+        const list = r.dataList || r.data?.dataList || r.data || [];
+        if (Array.isArray(list) && list.length > 0) {
+          applyDeviceData(list);
+          break;
+        }
       }
-    } catch(e) { console.warn('Station day error:', e); }
+    } catch(e) { console.warn('[DY] device/latest(' + sn + ') error:', e); }
   }
 
   bannerTime();
 }
 
-function applyStation(d) {
-  // Campos confirmados pela API Deye Cloud EU
-  const pv   = num(d.generationPower);   // W - potência solar
-  const load = num(d.consumptionPower);  // W - consumo casa
-  const wire = num(d.wirePower);         // W - rede (+export, -import)
-  const bat  = num(d.batterySOC);        // % - bateria
-  const batP = num(d.chargePower || d.batteryPower); // W - bat (+carregar, -descarregar)
+function applyStation(resp) {
+  // A API Deye EU encapsula os dados em resp.data quando code='1000000'
+  // mas às vezes os campos estão no nível raiz
+  const d = (resp.data && typeof resp.data === 'object' && !Array.isArray(resp.data))
+    ? resp.data
+    : resp;
 
-  // Dados diários acumulados (quando disponíveis)
-  const todPv = num(d.generationValue);
-  const todLd = num(d.consumptionValue);
-  const todGr = num(d.buyValue || d.purchaseValue);
-  const todEx = num(d.sellValue || d.wireValue);
+  console.log('[DY] applyStation dados:', JSON.stringify(d).substring(0, 600));
 
-  render('st', pv, load, wire, bat, batP, null);
-  if (todPv !== null && todPv > 0) renderDay(todPv, todLd, todGr, todEx);
+  // Potência em tempo real (W)
+  const pv   = num(d.generationPower   || d.pvPower        || d.pac);
+  const load = num(d.consumptionPower  || d.loadPower      || d.usePower);
+  const wire = num(d.wirePower         || d.gridPower      || d.purchasedPower);
+  const bat  = num(d.batterySOC        || d.batterySoc     || d.soc);
+  const batP = num(d.chargePower       || d.batteryPower   || d.batPower);
+  const temp = num(d.inverterTemperature || d.temperature  || d.dcTemp);
+
+  // Tensão de rede
+  const volt = num(d.gridVoltage || d.voltage || d.gridVolt);
+  if (volt !== null) st('c-v', volt.toFixed(1) + ' V');
+
+  // Totais diários acumulados (kWh) — vêm frequentemente no /latest
+  const todPv = num(d.generationValue  || d.pvValue     || d.dailyGeneration);
+  const todLd = num(d.consumptionValue || d.useValue    || d.dailyConsumption);
+  const todGr = num(d.buyValue         || d.purchaseValue || d.dailyBuy);
+  const todEx = num(d.sellValue        || d.wireValue   || d.dailySell);
+
+  render('st', pv, load, wire, bat, batP, temp);
+  if (todPv !== null && todPv > 0) {
+    renderDay(todPv, todLd, todGr, todEx);
+    window._todayData = { pv: todPv||0, ld: todLd||0, gr: todGr||0, ex: todEx||0 };
+  }
 }
 
 function applyDeviceData(list) {
@@ -575,6 +685,7 @@ function num(v) { return (v !== null && v !== undefined && !isNaN(parseFloat(v))
 // RENDER
 // ═══════════════════════════════════════════
 function render(src, pv, load, grid, bat, batP, temp) {
+  console.log(`[DY] render(${src}):`, {pv, load, grid, bat, batP, temp});
   if (pv   !== null) { st('f-pv',   Math.round(pv).toLocaleString('pt')+' W'); st('c-pv', (pv/1000).toFixed(2)); }
   if (bat  !== null) { st('f-bat',  bat.toFixed(0)+'%'); st('c-bat', bat.toFixed(0)); $('batbar').style.width = bat+'%'; }
   if (grid !== null) { st('f-grid', Math.round(Math.abs(grid)).toLocaleString('pt')+' W'); st('c-grid', Math.round(Math.abs(grid)));
