@@ -638,71 +638,69 @@ function accumulateEnergy(pvW, loadW, wireW, batW) {
 }
 
 async function fetchAll() {
+  // ── WORKER KV: dados acumulados do dia + live ──
+  try {
+    const r = await fetch(CFG.proxy + '/data');
+    if (r.ok) {
+      const d = await r.json();
+      if (d.ok && d.data) {
+        const acc = d.data;
+        console.log('[DY] Worker /data source=' + d.source, 'pv=' + acc.pv + 'kWh');
+
+        // kWh acumulados do dia
+        if (acc.pv > 0.001 || acc.ld > 0.001 || acc.ex > 0.001) {
+          renderDay(acc.pv, acc.ld, acc.gr, acc.ex);
+          window._todayData = { pv:acc.pv, ld:acc.ld, gr:acc.gr, ex:acc.ex, _source:'worker' };
+          st('t-bc', acc.bc.toFixed(1)+' kWh');
+          st('t-bd', acc.bd.toFixed(1)+' kWh');
+        }
+
+        // Dados em tempo real do Worker
+        if (acc.live && acc.live.pvW !== null) {
+          const lv  = acc.live;
+          const age = Math.round((Date.now() - lv.ts) / 1000);
+          render('worker', lv.pvW, lv.ldW, lv.wire, lv.bat, lv.batP, lv.temp);
+          if (age > 180) {
+            setPill('DADOS ANTIGOS (' + age + 's)', false);
+          } else {
+            setPill('ON-GRID · DADOS REAIS', true);
+            banner(true);
+          }
+          bannerTime();
+          return; // Worker tem tudo — não precisamos de mais nada
+        }
+      }
+    }
+  } catch(e) {
+    console.warn('[DY] Worker /data error:', e.message);
+  }
+
+  // ── FALLBACK: API directa (se Worker falhar) ──
   if (!await ensureToken()) return;
   const appId = localStorage.getItem('dy_appId') || CFG.appId;
-
-  // ── STATION LIST (descobrir stationId — só uma vez) ──
   let sid = localStorage.getItem('dy_stationId') || '';
   if (!sid) {
     try {
       const r = await api('/v1.0/station/list?appId=' + appId, {});
-      console.log('[DY] station/list:', JSON.stringify(r).substring(0, 600));
       const raw = r.stationList || r.data?.stationList || r.data || [];
       const arr = Array.isArray(raw) ? raw : [];
       if (arr.length > 0) {
-        sid = String(arr[0].id || arr[0].stationId || arr[0].station_id || '');
-        if (sid) { localStorage.setItem('dy_stationId', sid); console.log('[DY] stationId:', sid); }
+        sid = String(arr[0].id || arr[0].stationId || '');
+        if (sid) localStorage.setItem('dy_stationId', sid);
       }
-    } catch(e) { console.warn('[DY] station/list error:', e); }
+    } catch(e) {}
   }
-
-  // ── STATION LATEST (potência em tempo real) ──
   if (sid) {
     try {
       const r = await api('/v1.0/station/latest?appId=' + appId, { stationId: sid });
-      console.log('[DY] station/latest full:', JSON.stringify(r).substring(0, 1000));
-      if (r && (r.code === '1000000' || (!r.error && r.success !== false))) {
-        applyStation(r);
-      }
+      if (r && (r.code === '1000000' || r.success !== false)) applyStation(r);
     } catch(e) { console.warn('[DY] station/latest error:', e); }
   }
 
-  // ── STATION REPORT DATA (totais diários) ──
-  if (sid) {
-    try {
-      const today = new Date().toISOString().split('T')[0].replace(/-/g,'');
-      const r = await api('/v1.0/station/reportData?appId=' + appId, {
-        stationId:  sid,
-        reportType: 1,
-        queryTime:  today
-      });
-      console.log('[DY] station/reportData:', JSON.stringify(r).substring(0, 800));
-      if (r && r.code === '1000000') {
-        const d   = r.data || r;
-        const tPv = num(d.generationValue || d.pvValue    || d.pvEnergy    || d.generation);
-        const tLd = num(d.consumptionValue|| d.useValue   || d.loadEnergy  || d.consumption);
-        const tGr = num(d.buyValue        || d.purchaseValue || d.importEnergy || d.gridBuy);
-        const tEx = num(d.sellValue       || d.wireValue  || d.exportEnergy || d.gridSell);
-        if (tPv !== null && tPv > 0) {
-          renderDay(tPv, tLd, tGr, tEx);
-          window._todayData = { pv:tPv||0, ld:tLd||0, gr:tGr||0, ex:tEx||0 };
-        }
-      }
-    } catch(e) { console.warn('[DY] station/reportData error:', e); }
-  }
-
-  // ── FALLBACK + UPDATE: usar acumulação local sempre que API não devolveu kWh ──
-  // Actualiza a cada ciclo com os valores mais recentes do acumulador
-  if (_acc.pv > 0.001) {
-    const accPv = +_acc.pv.toFixed(2);
-    const accLd = +_acc.ld.toFixed(2);
-    const accGr = +_acc.gr.toFixed(2);
-    const accEx = +_acc.ex.toFixed(2);
-    // Só usa acumulação se a API não devolveu dados melhores nesta sessão
-    if (!window._todayData || window._todayData._source === 'acc') {
-      renderDay(accPv, accLd, accGr, accEx);
-      window._todayData = { pv:accPv, ld:accLd, gr:accGr, ex:accEx, _source:'acc' };
-    }
+  // Acumulador local como último recurso
+  if (!window._todayData && _acc.pv > 0.001) {
+    renderDay(+_acc.pv.toFixed(2), +_acc.ld.toFixed(2), +_acc.gr.toFixed(2), +_acc.ex.toFixed(2));
+    window._todayData = { pv:_acc.pv, ld:_acc.ld, gr:_acc.gr, ex:_acc.ex, _source:'local' };
   }
 
   bannerTime();
@@ -993,14 +991,28 @@ let lineChart = null;
 function updateLiveChart(pvW, loadW, batPW, gridW) {
   const now = new Date();
   const lbl = now.getHours()+':'+String(now.getMinutes()).padStart(2,'0');
-  if (liveChart.lb.length > 24) {
-    ['lb','pv','ld','bat','gr'].forEach(k => liveChart[k].shift());
+
+  // Só adicionar ponto se o label mudou (1 ponto por minuto no máximo)
+  const lastLbl = liveChart.lb[liveChart.lb.length - 1];
+  if (lbl === lastLbl) {
+    // Actualizar o último ponto em vez de adicionar novo
+    const i = liveChart.lb.length - 1;
+    if (pvW  !== null) liveChart.pv[i]  = +(pvW/1000).toFixed(2);
+    if (loadW !== null) liveChart.ld[i] = +(loadW/1000).toFixed(2);
+    if (batPW !== null) liveChart.bat[i]= +(batPW/1000).toFixed(2);
+    if (gridW !== null) liveChart.gr[i] = +(gridW/1000).toFixed(2);
+  } else {
+    // Novo minuto — adicionar ponto
+    if (liveChart.lb.length >= 20) {
+      ['lb','pv','ld','bat','gr'].forEach(k => liveChart[k].shift());
+    }
+    liveChart.lb.push(lbl);
+    liveChart.pv.push(pvW   !== null ? +(pvW/1000).toFixed(2)   : null);
+    liveChart.ld.push(loadW !== null ? +(loadW/1000).toFixed(2)  : null);
+    liveChart.bat.push(batPW!== null ? +(batPW/1000).toFixed(2) : null);
+    liveChart.gr.push(gridW !== null ? +(gridW/1000).toFixed(2) : null);
   }
-  liveChart.lb.push(lbl);
-  liveChart.pv.push(pvW !== null ? +(pvW/1000).toFixed(2) : null);
-  liveChart.ld.push(loadW !== null ? +(loadW/1000).toFixed(2) : null);
-  liveChart.bat.push(batPW !== null ? +(batPW/1000).toFixed(2) : null);
-  liveChart.gr.push(gridW !== null ? +(gridW/1000).toFixed(2) : null);
+
   if (lineChart) {
     lineChart.data.labels = liveChart.lb;
     lineChart.data.datasets[0].data = liveChart.pv;
@@ -1031,7 +1043,7 @@ function buildCharts() {
     {label:'Consumo kW',data:ld,borderColor:'#C471ED',backgroundColor:'rgba(196,113,237,0.05)',fill:true,tension:0.4,pointRadius:2,pointBackgroundColor:'#C471ED',borderWidth:2},
     {label:'Bateria kW',data:bat,borderColor:'#A8E063',backgroundColor:'rgba(168,224,99,0.06)',fill:false,tension:0.4,pointRadius:2,pointBackgroundColor:'#A8E063',borderWidth:2,borderDash:[4,2]},
     {label:'Rede kW',data:gr,borderColor:'#4ECDC4',backgroundColor:'rgba(78,205,196,0.06)',fill:false,tension:0.4,pointRadius:2,pointBackgroundColor:'#4ECDC4',borderWidth:1.5,borderDash:[5,3]}
-  ]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CD.col,font:CD.font,boxWidth:10}}},scales:{x:{ticks:{color:CD.col,font:CD.font},grid:{color:CD.grid}},y:{suggestedMin:-6,suggestedMax:12,ticks:{color:CD.col,font:CD.font,stepSize:2,callback:v=>v+' kW'},grid:{color:CD.grid}}}}});
+  ]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CD.col,font:CD.font,boxWidth:10}}},scales:{x:{ticks:{color:CD.col,font:CD.font},grid:{color:CD.grid}},y:{ticks:{color:CD.col,font:CD.font,stepSize:2,callback:v=>v+' kW'},grid:{color:CD.grid}}}}});
 
   // Pie — guardamos referência para actualizar com dados reais
   window._pieChart = new Chart($('ch-pie'), {type:'doughnut', data:{labels:['Autoconsumo','Exportado','Da Rede'], datasets:[{data:[60,25,15],backgroundColor:['rgba(255,209,102,0.8)','rgba(168,224,99,0.8)','rgba(255,107,107,0.7)'],borderColor:'rgba(255,255,255,0.05)',borderWidth:2}]}, options:{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{position:'right',labels:{color:CD.col,font:CD.font,boxWidth:10,padding:8}}}}});
