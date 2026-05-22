@@ -477,37 +477,51 @@ async function fetchAll() {
     } catch(e) { console.warn('Station latest error:', e); }
   }
 
-  // ── DEVICE MEASURE POINTS (tem dados detalhados do inversor) ──
-  try {
-    const r = await api('/v1.0/device/measurePoints?appId=' + appId, { deviceSn: CFG.devSn });
-    if (r && r.success !== false && r.measurePoints) {
-      applyMeasurePoints(r.measurePoints);
-    }
-  } catch(e) { console.warn('measurePoints error:', e); }
+  // ── STATION DAY HISTORY (totais diários) ──
+  if (sid) {
+    try {
+      const today = new Date();
+      const dateStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+      const r = await api('/v1.0/station/history?appId=' + appId, {
+        stationId: sid,
+        startTime: Math.floor(new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime() / 1000),
+        endTime:   Math.floor(Date.now() / 1000),
+        timeType:  1
+      });
+      console.log('Day history:', JSON.stringify(r).substring(0, 500));
+      if (r && r.success !== false && r.stationDataItems && r.stationDataItems.length > 0) {
+        // Sum up today's values
+        const items = r.stationDataItems;
+        const sum = k => items.reduce((a, item) => a + (parseFloat(item[k]) || 0), 0);
+        renderDay(
+          parseFloat(items[items.length-1]?.generationValue || 0),
+          parseFloat(items[items.length-1]?.consumptionValue || 0),
+          parseFloat(items[items.length-1]?.buyValue || 0),
+          parseFloat(items[items.length-1]?.sellValue || items[items.length-1]?.wireValue || 0)
+        );
+      }
+    } catch(e) { console.warn('Day history error:', e); }
+  }
 
   bannerTime();
 }
 
-function applyMeasurePoints(mp) {
-  // measurePoints is an array of {name, unit} — it's just metadata, not values
-  // The actual values come from station/latest
-  console.log('MeasurePoints available:', mp.map(m=>m.name).join(', '));
-}
-
 function applyStation(d) {
-  // Campos confirmados pela API Deye Cloud EU (station/latest)
-  const pv   = num(d.generationPower);                          // W - potência solar
-  const load = num(d.usePower        || d.loadPower);           // W - consumo
-  const grid = num(d.gridPower       || d.purchasedPower);      // W - rede (+ import, - export)
-  const bat  = num(d.batterySOC      || d.batterySoc);          // % - bateria
-  const batP = num(d.chargePower     || d.batteryPower);        // W - carga/descarga bat
-  const todPv= num(d.generationValue || d.dailyGeneration);     // kWh - produção hoje
-  const todLd= num(d.useValue        || d.dailyUse);            // kWh - consumo hoje
-  const todGr= num(d.buyValue        || d.dailyBuy);            // kWh - comprado rede hoje
-  const todEx= num(d.wireValue       || d.sellValue);           // kWh - vendido hoje
+  // Campos confirmados: generationPower, consumptionPower, wirePower, chargePower, batterySOC
+  const pv   = num(d.generationPower);
+  const load = num(d.consumptionPower);
+  const wire = num(d.wirePower);      // positivo = exportar, negativo = importar
+  const bat  = num(d.batterySOC);
+  const batP = num(d.chargePower);   // negativo = descarregar, positivo = carregar
+
+  // gridPower vem null — usar wirePower como proxy da rede
+  // wirePower positivo = a vender, negativo = a comprar
+  const grid = wire !== null ? wire : null;
 
   render('st', pv, load, grid, bat, batP, null);
-  if (todPv !== null) renderDay(todPv, todLd, todGr, todEx);
+
+  // Dados diários: a API station/latest não os inclui
+  // São obtidos via fetchDayHistory()
 }
 
 function applyDeviceData(list) {
@@ -564,6 +578,9 @@ function render(src, pv, load, grid, bat, batP, temp) {
     $('auto-bar').style.width = Math.min(100,(auto/24)*100)+'%';
     st('auto-sub', `Cap. útil: ${usable.toFixed(1)} kWh · Noite: ${night.toFixed(1)} kW`);
   }
+
+  // Update live chart
+  updateLiveChart(pv, load, batP, grid);
 
   // Alerts
   const alerts = [];
@@ -674,9 +691,34 @@ document.head.appendChild(cjs);
 
 const CD = { col:'#5A6785', font:{family:'JetBrains Mono',size:10}, grid:'rgba(255,255,255,0.04)' };
 
+// Live chart data store
+const liveChart = { lb:[], pv:[], ld:[], bat:[], gr:[] };
+let lineChart = null;
+
+function updateLiveChart(pvW, loadW, batPW, gridW) {
+  const now = new Date();
+  const lbl = now.getHours()+':'+String(now.getMinutes()).padStart(2,'0');
+  if (liveChart.lb.length > 24) {
+    ['lb','pv','ld','bat','gr'].forEach(k => liveChart[k].shift());
+  }
+  liveChart.lb.push(lbl);
+  liveChart.pv.push(pvW !== null ? +(pvW/1000).toFixed(2) : null);
+  liveChart.ld.push(loadW !== null ? +(loadW/1000).toFixed(2) : null);
+  liveChart.bat.push(batPW !== null ? +(batPW/1000).toFixed(2) : null);
+  liveChart.gr.push(gridW !== null ? +(gridW/1000).toFixed(2) : null);
+  if (lineChart) {
+    lineChart.data.labels = liveChart.lb;
+    lineChart.data.datasets[0].data = liveChart.pv;
+    lineChart.data.datasets[1].data = liveChart.ld;
+    lineChart.data.datasets[2].data = liveChart.bat;
+    lineChart.data.datasets[3].data = liveChart.gr;
+    lineChart.update('none');
+  }
+}
+
 function buildCharts() {
-  // Line chart 12h
-  const lb=[], pv=[], ld=[], gr=[];
+  // Simulated initial data for 12h
+  const lb=[], pv=[], ld=[], bat=[], gr=[];
   const now = new Date();
   for (let i=12;i>=0;i--) {
     const t = new Date(now - i*3600000);
@@ -685,13 +727,16 @@ function buildCharts() {
     const sf = Math.max(0, Math.sin(Math.PI*(h-6)/14));
     const p = +(9.1*sf*(0.85+Math.random()*0.15)).toFixed(2);
     const l = +(2.5+Math.random()*2.5).toFixed(2);
-    pv.push(p); ld.push(l); gr.push(+(Math.max(0,l-p)*(Math.random()<0.3?1:0)).toFixed(2));
+    const b = +(p > l ? -(p-l)*0.5 : (l-p)*0.3).toFixed(2); // bat charges when sunny
+    pv.push(p); ld.push(l); bat.push(b);
+    gr.push(+(Math.max(0,l-p-Math.abs(b))*(Math.random()<0.2?1:0)).toFixed(2));
   }
-  new Chart($('ch-line'), {type:'line', data:{labels:lb, datasets:[
-    {label:'Solar kW',data:pv,borderColor:'#F5A623',backgroundColor:'rgba(245,166,35,0.08)',fill:true,tension:0.4,pointRadius:3,pointBackgroundColor:'#F5A623',borderWidth:2},
-    {label:'Consumo kW',data:ld,borderColor:'#C471ED',backgroundColor:'rgba(196,113,237,0.06)',fill:true,tension:0.4,pointRadius:3,pointBackgroundColor:'#C471ED',borderWidth:2},
-    {label:'Rede kW',data:gr,borderColor:'#4ECDC4',backgroundColor:'rgba(78,205,196,0.08)',fill:true,tension:0.4,pointRadius:3,pointBackgroundColor:'#4ECDC4',borderWidth:2,borderDash:[5,3]}
-  ]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CD.col,font:CD.font,boxWidth:10}}},scales:{x:{ticks:{color:CD.col,font:CD.font},grid:{color:CD.grid}},y:{ticks:{color:CD.col,font:CD.font,callback:v=>v+' kW'},grid:{color:CD.grid},min:0}}}});
+  lineChart = new Chart($('ch-line'), {type:'line', data:{labels:lb, datasets:[
+    {label:'Solar kW',data:pv,borderColor:'#F5A623',backgroundColor:'rgba(245,166,35,0.08)',fill:true,tension:0.4,pointRadius:2,pointBackgroundColor:'#F5A623',borderWidth:2},
+    {label:'Consumo kW',data:ld,borderColor:'#C471ED',backgroundColor:'rgba(196,113,237,0.05)',fill:true,tension:0.4,pointRadius:2,pointBackgroundColor:'#C471ED',borderWidth:2},
+    {label:'Bateria kW',data:bat,borderColor:'#A8E063',backgroundColor:'rgba(168,224,99,0.06)',fill:false,tension:0.4,pointRadius:2,pointBackgroundColor:'#A8E063',borderWidth:2,borderDash:[4,2]},
+    {label:'Rede kW',data:gr,borderColor:'#4ECDC4',backgroundColor:'rgba(78,205,196,0.06)',fill:false,tension:0.4,pointRadius:2,pointBackgroundColor:'#4ECDC4',borderWidth:1.5,borderDash:[5,3]}
+  ]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CD.col,font:CD.font,boxWidth:10}}},scales:{x:{ticks:{color:CD.col,font:CD.font},grid:{color:CD.grid}},y:{ticks:{color:CD.col,font:CD.font,callback:v=>v+' kW'},grid:{color:CD.grid}}}}});
 
   // Pie
   new Chart($('ch-pie'), {type:'doughnut', data:{labels:['Autoconsumo','Exportado','Da Rede'], datasets:[{data:[60,25,15],backgroundColor:['rgba(255,209,102,0.8)','rgba(168,224,99,0.8)','rgba(255,107,107,0.7)'],borderColor:'rgba(255,255,255,0.05)',borderWidth:2}]}, options:{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{position:'right',labels:{color:CD.col,font:CD.font,boxWidth:10,padding:8}}}}});
