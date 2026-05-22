@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt">
 <head>
@@ -328,8 +327,8 @@ const CFG = {
   secret:  'fda694b18c04151a4443e8fde8b48033',
   baseUrl: 'https://eu1-developer.deyecloud.com',
   proxy:   'https://lingering-darkness-583a.nuno-jorge-torres.workers.dev',
-  devSn:   '2509094105',
-  logSn:   '3584353340',
+  devSn:   '2509094105',   // string — importante para a API
+  logSn:   '3584353340',   // string — importante para a API
 };
 
 // ═══════════════════════════════════════════
@@ -450,40 +449,46 @@ $('m-diag').onclick = async () => {
       report += `⚡ station/latest: code=${d.code||'?'} pv=${dat.generationPower??'?'}W bat=${dat.batterySOC??dat.batterySoc??'?'}%\n`;
     } catch(e) { report += `❌ station/latest: ${e.message}\n`; }
 
-    // 4. Testar device/latest (devSn) - tem os kWh diários reais
+    // 4. Testar device/list — descobrir SNs reais dos dispositivos
+    let diagSns = [];
     try {
-      const url4 = CFG.proxy + '?target=' + encodeURIComponent(CFG.baseUrl + '/v1.0/device/latest?appId=' + id);
-      const r4 = await fetch(url4, { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok}, body: JSON.stringify({deviceSn:CFG.devSn}) });
+      const url4 = CFG.proxy + '?target=' + encodeURIComponent(CFG.baseUrl + '/v1.0/device/list?appId=' + id);
+      const r4 = await fetch(url4, { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok}, body: JSON.stringify({page:1,size:10}) });
       const d4 = await r4.json();
-      const list4 = d4.dataList || d4.data?.dataList || d4.data || [];
-      const arr4 = Array.isArray(list4) ? list4 : [];
-      const etdy = arr4.find(x => x.key==='Etdy_ge0' || x.key==='DailyProduction');
-      report += `🔋 device/latest(devSn): code=${d4.code||d4.status||'?'} items=${arr4.length} Etdy_ge0=${etdy?.value??'não encontrado'}\n`;
-      if (arr4.length === 0) report += `   ⚠️ Resposta raw: ${JSON.stringify(d4).substring(0,150)}\n`;
-    } catch(e) { report += `❌ device/latest(devSn): ${e.message}\n`; }
+      const devs = d4.deviceList || d4.data?.deviceList || d4.data || [];
+      const arr4 = Array.isArray(devs) ? devs : [];
+      diagSns = arr4.map(d => String(d.deviceSn||d.sn||'')).filter(Boolean);
+      report += `📋 device/list: code=${d4.code||d4.status||'?'} devices=${arr4.length} SNs=[${diagSns.join(',')||'nenhum'}]\n`;
+      if (arr4.length === 0) report += `   ⚠️ Raw: ${JSON.stringify(d4).substring(0,200)}\n`;
+    } catch(e) { report += `❌ device/list: ${e.message}\n`; }
 
-    // 5. Testar device/latest (logSn) - logger
-    try {
-      const url5 = CFG.proxy + '?target=' + encodeURIComponent(CFG.baseUrl + '/v1.0/device/latest?appId=' + id);
-      const r5 = await fetch(url5, { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok}, body: JSON.stringify({deviceSn:CFG.logSn}) });
-      const d5 = await r5.json();
-      const list5 = d5.dataList || d5.data?.dataList || d5.data || [];
-      const arr5 = Array.isArray(list5) ? list5 : [];
-      report += `📡 device/latest(logSn): code=${d5.code||d5.status||'?'} items=${arr5.length}\n`;
-      if (arr5.length === 0) report += `   ⚠️ Resposta raw: ${JSON.stringify(d5).substring(0,150)}\n`;
-    } catch(e) { report += `❌ device/latest(logSn): ${e.message}\n`; }
+    // Fallback para SNs do CFG
+    if (diagSns.length === 0) diagSns = [CFG.devSn, CFG.logSn];
+
+    // 5. Testar device/latest com cada SN encontrado
+    for (const sn of diagSns) {
+      try {
+        const url5 = CFG.proxy + '?target=' + encodeURIComponent(CFG.baseUrl + '/v1.0/device/latest?appId=' + id);
+        const r5 = await fetch(url5, { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok}, body: JSON.stringify({deviceSn:String(sn)}) });
+        const d5 = await r5.json();
+        const list5 = d5.dataList || d5.data?.dataList || d5.data || [];
+        const arr5 = Array.isArray(list5) ? list5 : [];
+        const etdy = arr5.find(x => x.key==='Etdy_ge0'||x.key==='DailyProduction'||x.key==='dailyGeneration');
+        report += `🔋 device/latest(${sn}): code=${d5.code||'?'} items=${arr5.length} Etdy_ge0=${etdy?.value??'—'}\n`;
+        if (arr5.length===0 && d5.code!=='1000000') report += `   ⚠️ Raw: ${JSON.stringify(d5).substring(0,180)}\n`;
+      } catch(e) { report += `❌ device/latest(${sn}): ${e.message}\n`; }
+    }
   } else {
-    report += '⚠️ Sem stationId — não foi possível testar todos os endpoints\n';
-    // Mesmo sem stationId, testa device/latest
+    report += '⚠️ Sem stationId — a testar device/list na mesma\n';
     try {
-      const url4 = CFG.proxy + '?target=' + encodeURIComponent(CFG.baseUrl + '/v1.0/device/latest?appId=' + id);
-      const r4 = await fetch(url4, { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok}, body: JSON.stringify({deviceSn:CFG.devSn}) });
+      const url4 = CFG.proxy + '?target=' + encodeURIComponent(CFG.baseUrl + '/v1.0/device/list?appId=' + id);
+      const r4 = await fetch(url4, { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok}, body: JSON.stringify({page:1,size:10}) });
       const d4 = await r4.json();
-      const list4 = d4.dataList || d4.data?.dataList || d4.data || [];
-      const arr4 = Array.isArray(list4) ? list4 : [];
-      report += `🔋 device/latest(devSn): code=${d4.code||d4.status||'?'} items=${arr4.length}\n`;
-      if (arr4.length === 0) report += `   ⚠️ Raw: ${JSON.stringify(d4).substring(0,150)}\n`;
-    } catch(e) { report += `❌ device/latest(devSn): ${e.message}\n`; }
+      const devs = d4.deviceList || d4.data?.deviceList || d4.data || [];
+      const arr4 = Array.isArray(devs) ? devs : [];
+      report += `📋 device/list: code=${d4.code||'?'} devices=${arr4.length}\n`;
+      report += `   Raw: ${JSON.stringify(d4).substring(0,250)}\n`;
+    } catch(e) { report += `❌ device/list: ${e.message}\n`; }
   }
 
   $('mstatus').style.whiteSpace = 'pre';
@@ -599,15 +604,29 @@ async function fetchAll() {
     } catch(e) { console.warn('[DY] station/latest error:', e); }
   }
 
-  // ── DEVICE LATEST (totais diários reais: Etdy_ge0, Etdy_use0, Etdy_buy0, Etdy_sell0) ──
-  // O /station/day e /station/energy retornam 404 na API EU.
-  // Os kWh diários reais estão no /device/latest via dataList com chaves Etdy_*.
-  const sns = [devSn, logSn].filter(Boolean);
-  for (const sn of sns) {
+  // ── DEVICE LIST + DEVICE LATEST (kWh diários reais via Etdy_ge0, etc.) ──
+  // O /device/latest precisa do deviceSn correcto da API (pode diferir do SN físico).
+  // Primeiro descobrimos os SNs via /device/list, depois tentamos /device/latest.
+  let devSnList = [];
+  try {
+    const dl = await api('/v1.0/device/list?appId=' + appId, { page: 1, size: 10 });
+    console.log('[DY] device/list:', JSON.stringify(dl).substring(0, 600));
+    const devices = dl.deviceList || dl.data?.deviceList || dl.data || [];
+    const arr = Array.isArray(devices) ? devices : [];
+    devSnList = arr.map(d => String(d.deviceSn || d.sn || d.serialNumber || '')).filter(Boolean);
+    console.log('[DY] device SNs encontrados:', devSnList);
+  } catch(e) { console.warn('[DY] device/list error:', e); }
+
+  // Fallback: usar SNs do CFG se device/list não devolver nada
+  if (devSnList.length === 0) {
+    devSnList = [devSn, logSn].filter(Boolean).map(String);
+  }
+
+  for (const sn of devSnList) {
     try {
       const r = await api('/v1.0/device/latest?appId=' + appId, { deviceSn: sn });
-      console.log('[DY] device/latest(' + sn + '):', JSON.stringify(r).substring(0, 1000));
-      if (r && (r.code === '1000000' || (!r.error && r.success !== false))) {
+      console.log('[DY] device/latest(' + sn + '):', JSON.stringify(r).substring(0, 800));
+      if (r && r.code === '1000000') {
         const list = r.dataList || r.data?.dataList || r.data || [];
         if (Array.isArray(list) && list.length > 0) {
           applyDeviceData(list);
@@ -634,18 +653,23 @@ function applyStation(resp) {
   const load = num(d.consumptionPower  || d.loadPower      || d.usePower);
   const wire = num(d.wirePower         || d.gridPower      || d.purchasedPower);
   const bat  = num(d.batterySOC        || d.batterySoc     || d.soc);
-  const batP = num(d.chargePower       || d.batteryPower   || d.batPower);
+  // chargePower pode ser null mesmo quando batteryPower tem valor — usar num() em cada um
+  const batP = num(d.chargePower) ?? num(d.batteryPower) ?? num(d.batPower) ?? num(d.dischargePower);
   const temp = num(d.inverterTemperature || d.temperature  || d.dcTemp);
 
   // Tensão de rede
   const volt = num(d.gridVoltage || d.voltage || d.gridVolt);
   if (volt !== null) st('c-v', volt.toFixed(1) + ' V');
 
-  // Totais diários acumulados (kWh) — vêm frequentemente no /latest
-  const todPv = num(d.generationValue  || d.pvValue     || d.dailyGeneration);
-  const todLd = num(d.consumptionValue || d.useValue    || d.dailyConsumption);
-  const todGr = num(d.buyValue         || d.purchaseValue || d.dailyBuy);
-  const todEx = num(d.sellValue        || d.wireValue   || d.dailySell);
+  // Totais diários acumulados (kWh)
+  // A API EU v1.0/station/latest pode não incluir estes campos — ficam null
+  // Os kWh vêm do /device/latest via applyDeviceData()
+  const todPv = num(d.generationValue)  ?? num(d.pvValue)       ?? num(d.dailyGeneration) ?? num(d.dayEnergy);
+  const todLd = num(d.consumptionValue) ?? num(d.useValue)      ?? num(d.dailyConsumption);
+  const todGr = num(d.buyValue)         ?? num(d.purchaseValue) ?? num(d.dailyBuy)        ?? num(d.gridBuyDay);
+  const todEx = num(d.sellValue)        ?? num(d.wireValue)     ?? num(d.dailySell)       ?? num(d.gridSellDay);
+
+  console.log('[DY] kWh diários station:', {todPv, todLd, todGr, todEx});
 
   render('st', pv, load, wire, bat, batP, temp);
   if (todPv !== null && todPv > 0) {
