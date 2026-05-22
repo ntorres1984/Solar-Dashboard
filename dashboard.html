@@ -507,21 +507,21 @@ async function fetchAll() {
 }
 
 function applyStation(d) {
+  // Log ALL fields from the API response
+  const allFields = Object.keys(d).filter(k => k !== 'code' && k !== 'msg' && k !== 'success' && k !== 'requestId');
+  console.log('=== STATION LATEST FIELDS ===');
+  allFields.forEach(k => console.log(k + ': ' + d[k]));
+  console.log('=============================');
+
   // Campos confirmados: generationPower, consumptionPower, wirePower, chargePower, batterySOC
   const pv   = num(d.generationPower);
   const load = num(d.consumptionPower);
-  const wire = num(d.wirePower);      // positivo = exportar, negativo = importar
+  const wire = num(d.wirePower);
   const bat  = num(d.batterySOC);
-  const batP = num(d.chargePower);   // negativo = descarregar, positivo = carregar
-
-  // gridPower vem null — usar wirePower como proxy da rede
-  // wirePower positivo = a vender, negativo = a comprar
+  const batP = num(d.chargePower);
   const grid = wire !== null ? wire : null;
 
   render('st', pv, load, grid, bat, batP, null);
-
-  // Dados diários: a API station/latest não os inclui
-  // São obtidos via fetchDayHistory()
 }
 
 function applyDeviceData(list) {
