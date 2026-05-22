@@ -1031,7 +1031,7 @@ function buildCharts() {
     {label:'Consumo kW',data:ld,borderColor:'#C471ED',backgroundColor:'rgba(196,113,237,0.05)',fill:true,tension:0.4,pointRadius:2,pointBackgroundColor:'#C471ED',borderWidth:2},
     {label:'Bateria kW',data:bat,borderColor:'#A8E063',backgroundColor:'rgba(168,224,99,0.06)',fill:false,tension:0.4,pointRadius:2,pointBackgroundColor:'#A8E063',borderWidth:2,borderDash:[4,2]},
     {label:'Rede kW',data:gr,borderColor:'#4ECDC4',backgroundColor:'rgba(78,205,196,0.06)',fill:false,tension:0.4,pointRadius:2,pointBackgroundColor:'#4ECDC4',borderWidth:1.5,borderDash:[5,3]}
-  ]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CD.col,font:CD.font,boxWidth:10}}},scales:{x:{ticks:{color:CD.col,font:CD.font},grid:{color:CD.grid}},y:{suggestedMin:-15,suggestedMax:30,ticks:{color:CD.col,font:CD.font,callback:v=>v+' kW'},grid:{color:CD.grid}}}}});
+  ]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CD.col,font:CD.font,boxWidth:10}}},scales:{x:{ticks:{color:CD.col,font:CD.font},grid:{color:CD.grid}},y:{suggestedMin:-8,ticks:{color:CD.col,font:CD.font,stepSize:2,callback:v=>v+' kW'},grid:{color:CD.grid}}}}});
 
   // Pie — guardamos referência para actualizar com dados reais
   window._pieChart = new Chart($('ch-pie'), {type:'doughnut', data:{labels:['Autoconsumo','Exportado','Da Rede'], datasets:[{data:[60,25,15],backgroundColor:['rgba(255,209,102,0.8)','rgba(168,224,99,0.8)','rgba(255,107,107,0.7)'],borderColor:'rgba(255,255,255,0.05)',borderWidth:2}]}, options:{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{position:'right',labels:{color:CD.col,font:CD.font,boxWidth:10,padding:8}}}}});
