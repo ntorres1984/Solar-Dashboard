@@ -454,45 +454,56 @@ async function ensureToken() {
 // ═══════════════════════════════════════════
 async function fetchAll() {
   if (!await ensureToken()) return;
-
   const appId = localStorage.getItem('dy_appId') || CFG.appId;
 
-  // 1. Station list → get stationId
+  // ── STATION LIST: try different body formats ──
   let sid = localStorage.getItem('dy_stationId') || '';
   if (!sid) {
-    try {
-      const r = await api('/v1.0/station/list?appId=' + appId, { pageSize:10, pageIndex:1 });
-      console.log('Station list:', r);
-      const list = r.stationList || (r.data && r.data.stationList) || [];
-      if (list.length > 0) {
-        sid = String(list[0].id || list[0].stationId || '');
-        if (sid) localStorage.setItem('dy_stationId', sid);
-      }
-    } catch(e) { console.warn('Station list error:', e); }
-  }
-
-  // 2. Station latest (dados em tempo real + diários)
-  if (sid) {
-    try {
-      const r = await api('/v1.0/station/latest?appId=' + appId, { stationId: parseInt(sid) || sid });
-      console.log('Station latest:', r);
-      if (r && r.success !== false) applyStation(r);
-    } catch(e) { console.warn('Station latest error:', e); }
-  }
-
-  // 3. Device current data (registos detalhados)
-  try {
-    // Try multiple endpoints to find the right one
-    let r = await api('/v1.0/device/latest?appId=' + appId, { deviceSnList: [CFG.devSn] });
-    console.log('Device latest:', r);
-    if (!r || r.status === 404) {
-      r = await api('/v1.0/device/currentData?appId=' + appId, { deviceSn: CFG.devSn });
-      console.log('Device currentData:', r);
+    for (const body of [{}, { pageSize:10, pageIndex:1 }, { page:{pageSize:10,pageIndex:1} }]) {
+      try {
+        const r = await api('/v1.0/station/list?appId=' + appId, body);
+        console.log('Station list body=' + JSON.stringify(body) + ':', JSON.stringify(r).substring(0,300));
+        if (r && !r.msg?.includes('invalid')) {
+          const list = r.stationList || r.stations || (r.data && r.data.stationList) || [];
+          if (list.length > 0) {
+            sid = String(list[0].id || list[0].stationId || list[0].plantId || '');
+            if (sid) { localStorage.setItem('dy_stationId', sid); break; }
+          }
+        }
+      } catch(e) {}
     }
-    console.log('Device data:', r);
-    const items = (r.deviceDataList && r.deviceDataList[0] && r.deviceDataList[0].dataList) || r.dataList || [];
-    if (items.length > 0) applyDeviceData(items);
-  } catch(e) { console.warn('Device data error:', e); }
+  }
+
+  // ── STATION LATEST ──
+  if (sid) {
+    for (const body of [{ stationId: sid }, { stationId: parseInt(sid) }, { id: sid }]) {
+      try {
+        const r = await api('/v1.0/station/latest?appId=' + appId, body);
+        console.log('Station latest body=' + JSON.stringify(body) + ':', JSON.stringify(r).substring(0,400));
+        if (r && r.success !== false && !r.error) { applyStation(r); break; }
+      } catch(e) {}
+    }
+  }
+
+  // ── DEVICE DATA: try all known endpoints ──
+  const eps = [
+    ['/v1.0/device/latest?appId=' + appId,        { deviceSnList:[CFG.devSn] }],
+    ['/v1.0/device/latest?appId=' + appId,        { deviceSn:CFG.devSn }],
+    ['/v1.0/device/currentData?appId=' + appId,   { deviceSn:CFG.devSn }],
+    ['/v1.0/device/measurePoints?appId=' + appId, { deviceSn:CFG.devSn }],
+    ['/v1.0/device/history?appId=' + appId,       { deviceSn:CFG.devSn, timeType:1 }],
+  ];
+  for (const [ep, body] of eps) {
+    try {
+      const r = await api(ep, body);
+      const epName = ep.split('/').pop().split('?')[0];
+      console.log('Device ' + epName + ':', JSON.stringify(r).substring(0,400));
+      if (r && !r.error && r.status !== 404 && r.success !== false) {
+        const items = (r.deviceDataList?.[0]?.dataList) || r.dataList || [];
+        if (Array.isArray(items) && items.length > 0) { applyDeviceData(items); break; }
+      }
+    } catch(e) {}
+  }
 
   bannerTime();
 }
