@@ -998,21 +998,24 @@ const liveChart = { lb:[], pv:[], ld:[], bat:[], gr:[] };
 let lineChart = null;
 
 function updateLiveChart(pvW, loadW, batPW, gridW) {
-  const now = new Date();
-  const lbl = now.getHours()+':'+String(now.getMinutes()).padStart(2,'0');
+  const now  = new Date();
+  const h    = now.getHours();
+  const m    = now.getMinutes();
+  // Agregar em intervalos de 30 minutos: xx:00 ou xx:30
+  const slot = m < 30 ? '00' : '30';
+  const lbl  = h + ':' + slot;
 
-  // Só adicionar ponto se o label mudou (1 ponto por minuto no máximo)
   const lastLbl = liveChart.lb[liveChart.lb.length - 1];
   if (lbl === lastLbl) {
-    // Actualizar o último ponto em vez de adicionar novo
+    // Actualizar o ponto actual com a média (usar último valor)
     const i = liveChart.lb.length - 1;
-    if (pvW  !== null) liveChart.pv[i]  = +(pvW/1000).toFixed(2);
-    if (loadW !== null) liveChart.ld[i] = +(loadW/1000).toFixed(2);
-    if (batPW !== null) liveChart.bat[i]= +(batPW/1000).toFixed(2);
-    if (gridW !== null) liveChart.gr[i] = +(gridW/1000).toFixed(2);
+    if (pvW   !== null) liveChart.pv[i]  = +(pvW/1000).toFixed(2);
+    if (loadW !== null) liveChart.ld[i]  = +(loadW/1000).toFixed(2);
+    if (batPW !== null) liveChart.bat[i] = +(batPW/1000).toFixed(2);
+    if (gridW !== null) liveChart.gr[i]  = +(gridW/1000).toFixed(2);
   } else {
-    // Novo minuto — adicionar ponto
-    if (liveChart.lb.length >= 20) {
+    // Novo slot de 30min — adicionar ponto (máx 24h = 48 pontos)
+    if (liveChart.lb.length >= 48) {
       ['lb','pv','ld','bat','gr'].forEach(k => liveChart[k].shift());
     }
     liveChart.lb.push(lbl);
@@ -1052,7 +1055,7 @@ function buildCharts() {
     {label:'Consumo kW',data:ld,borderColor:'#C471ED',backgroundColor:'rgba(196,113,237,0.05)',fill:true,tension:0.4,pointRadius:2,pointBackgroundColor:'#C471ED',borderWidth:2},
     {label:'Bateria kW',data:bat,borderColor:'#A8E063',backgroundColor:'rgba(168,224,99,0.06)',fill:false,tension:0.4,pointRadius:2,pointBackgroundColor:'#A8E063',borderWidth:2,borderDash:[4,2]},
     {label:'Rede kW',data:gr,borderColor:'#4ECDC4',backgroundColor:'rgba(78,205,196,0.06)',fill:false,tension:0.4,pointRadius:2,pointBackgroundColor:'#4ECDC4',borderWidth:1.5,borderDash:[5,3]}
-  ]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CD.col,font:CD.font,boxWidth:10}}},scales:{x:{ticks:{color:CD.col,font:CD.font},grid:{color:CD.grid}},y:{ticks:{color:CD.col,font:CD.font,stepSize:2,callback:v=>v+' kW'},grid:{color:CD.grid}}}}});
+  ]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CD.col,font:CD.font,boxWidth:10}}},scales:{x:{ticks:{color:CD.col,font:CD.font},grid:{color:CD.grid}},y:{min:-12,max:30,ticks:{color:CD.col,font:CD.font,stepSize:2,callback:v=>v+' kW'},grid:{color:CD.grid}}}}});
 
   // Pie — guardamos referência para actualizar com dados reais
   window._pieChart = new Chart($('ch-pie'), {type:'doughnut', data:{labels:['Autoconsumo','Exportado','Da Rede'], datasets:[{data:[60,25,15],backgroundColor:['rgba(255,209,102,0.8)','rgba(168,224,99,0.8)','rgba(255,107,107,0.7)'],borderColor:'rgba(255,255,255,0.05)',borderWidth:2}]}, options:{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{position:'right',labels:{color:CD.col,font:CD.font,boxWidth:10,padding:8}}}}});
