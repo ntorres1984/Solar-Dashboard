@@ -808,6 +808,12 @@ function render(src, pv, load, grid, bat, batP, temp) {
   // Acumular energia para fallback diário
   if (pv!==null && load!==null && grid!==null) accumulateEnergy(pv, load, grid, batP||0);
 
+  // Actualizar campos de bateria do dia (sempre, independente dos kWh totais)
+  if (_acc.bc > 0.001) st('t-bc', _acc.bc.toFixed(1)+' kWh');
+  else st('t-bc', '0.0 kWh');
+  if (_acc.bd > 0.001) st('t-bd', _acc.bd.toFixed(1)+' kWh');
+  else st('t-bd', '0.0 kWh');
+
   // Update live chart
   updateLiveChart(pv, load, batP, grid);
 
@@ -825,47 +831,65 @@ function renderDay(pv, ld, gr, ex) {
   if (ld !== null) st('t-ld', ld.toFixed(1)+' kWh');
   if (gr !== null) st('t-gr', gr.toFixed(1)+' kWh');
   if (ex !== null) st('t-ex', ex.toFixed(1)+' kWh');
-  // Bateria — vem do acumulador local
-  if (_acc.bc > 0.001) st('t-bc', _acc.bc.toFixed(1)+' kWh');
-  if (_acc.bd > 0.001) st('t-bd', _acc.bd.toFixed(1)+' kWh');
   recalcDay(pv||0, ld||0, gr||0, ex||0);
   updateDayCharts(pv||0, ld||0, gr||0, ex||0);
 }
 
 function updateDayCharts(pvKwh, ldKwh, grKwh, exKwh) {
   // Actualizar gráfico de distribuição energética (pie/doughnut)
-  if (window._pieChart && pvKwh > 0) {
-    const self = Math.max(0, pvKwh - exKwh);  // autoconsumo
-    const data = [
-      +self.toFixed(2),
-      +exKwh.toFixed(2),
-      +grKwh.toFixed(2)
-    ];
-    window._pieChart.data.datasets[0].data = data;
-    window._pieChart.update('none');
+  if (window._pieChart) {
+    const self = Math.max(0, pvKwh - exKwh);  // autoconsumo solar
+    // Só mostrar se há algum dado real
+    const total = self + exKwh + grKwh;
+    if (total > 0.01) {
+      window._pieChart.data.datasets[0].data = [
+        +self.toFixed(2),
+        +exKwh.toFixed(2),
+        +grKwh.toFixed(2)
+      ];
+      window._pieChart.update('none');
+    }
   }
 
   // Actualizar gráfico custo vs poupança hora a hora
-  // Usa dados reais do acumulador horário se disponíveis
-  if (window._costChart && pvKwh > 0) {
+  if (window._costChart && pvKwh > 0.01) {
     const t = T();
     const hl=[], cb=[], sb=[];
     const nowH = new Date().getHours();
+    // Normalização do perfil solar para o dia actual (6h → 21h)
+    let sfSum = 0;
+    for (let h=6; h<=20; h++) sfSum += Math.max(0, Math.sin(Math.PI*(h-6)/14));
+
     for (let h=6; h<=20; h++) {
       hl.push(h+':00');
       const pk = (h>=9&&h<=12)||(h>=18&&h<=21);
       const tr = pk ? t.peak : t.off;
-      // Distribuição horária proporcional ao perfil solar
       const sf  = Math.max(0, Math.sin(Math.PI*(h-6)/14));
-      const frac = sf / 7.0; // fracção do dia (normalizada)
-      const p   = pvKwh * frac;
-      const l   = ldKwh * frac * 0.9;
-      cb.push(l > p ? +( -(l-p)*tr ).toFixed(3) : 0);
-      sb.push(p > 0 ? +( Math.min(p,l)*tr + Math.max(0,p-l)*t.sell ).toFixed(3) : 0);
+      const frac = sfSum > 0 ? sf/sfSum : 0;
+
+      // Só mostrar horas passadas
+      if (h > nowH) { cb.push(null); sb.push(null); continue; }
+
+      const p = pvKwh * frac;   // solar nesta hora (kWh)
+      const l = ldKwh * frac;   // consumo nesta hora (kWh)
+      const g = grKwh * frac;   // importado da rede nesta hora (kWh)
+      const e = exKwh * frac;   // exportado nesta hora (kWh)
+
+      // Custo: energia comprada à rede × tarifa (negativo)
+      const custo  = g > 0 ? +(-(g * tr)).toFixed(3) : 0;
+      // Poupança: autoconsumo × tarifa evitada + exportado × preço venda
+      const autoc  = Math.min(p, l);
+      const poupan = +( autoc * tr + e * t.sell ).toFixed(3);
+
+      cb.push(custo);
+      sb.push(poupan);
     }
     window._costChart.data.labels = hl;
     window._costChart.data.datasets[0].data = sb;
     window._costChart.data.datasets[1].data = cb;
+    // Escala automática com mínimo simétrico
+    window._costChart.options.scales.y.min = undefined;
+    window._costChart.options.scales.y.max = undefined;
     window._costChart.update('none');
   }
 }
@@ -1007,7 +1031,7 @@ function buildCharts() {
     {label:'Consumo kW',data:ld,borderColor:'#C471ED',backgroundColor:'rgba(196,113,237,0.05)',fill:true,tension:0.4,pointRadius:2,pointBackgroundColor:'#C471ED',borderWidth:2},
     {label:'Bateria kW',data:bat,borderColor:'#A8E063',backgroundColor:'rgba(168,224,99,0.06)',fill:false,tension:0.4,pointRadius:2,pointBackgroundColor:'#A8E063',borderWidth:2,borderDash:[4,2]},
     {label:'Rede kW',data:gr,borderColor:'#4ECDC4',backgroundColor:'rgba(78,205,196,0.06)',fill:false,tension:0.4,pointRadius:2,pointBackgroundColor:'#4ECDC4',borderWidth:1.5,borderDash:[5,3]}
-  ]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CD.col,font:CD.font,boxWidth:10}}},scales:{x:{ticks:{color:CD.col,font:CD.font},grid:{color:CD.grid}},y:{ticks:{color:CD.col,font:CD.font,callback:v=>v+' kW'},grid:{color:CD.grid}}}}});
+  ]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CD.col,font:CD.font,boxWidth:10}}},scales:{x:{ticks:{color:CD.col,font:CD.font},grid:{color:CD.grid}},y:{suggestedMin:-15,suggestedMax:30,ticks:{color:CD.col,font:CD.font,callback:v=>v+' kW'},grid:{color:CD.grid}}}}});
 
   // Pie — guardamos referência para actualizar com dados reais
   window._pieChart = new Chart($('ch-pie'), {type:'doughnut', data:{labels:['Autoconsumo','Exportado','Da Rede'], datasets:[{data:[60,25,15],backgroundColor:['rgba(255,209,102,0.8)','rgba(168,224,99,0.8)','rgba(255,107,107,0.7)'],borderColor:'rgba(255,255,255,0.05)',borderWidth:2}]}, options:{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{position:'right',labels:{color:CD.col,font:CD.font,boxWidth:10,padding:8}}}}});
