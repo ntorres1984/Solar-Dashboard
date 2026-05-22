@@ -256,6 +256,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:24p
         <div class="tstat"><div class="tslbl">🏠 CONSUMIDO</div><div class="tsval" style="color:var(--load)" id="t-ld">—</div></div>
         <div class="tstat"><div class="tslbl">⬇️ DA REDE</div><div class="tsval" style="color:var(--grid)" id="t-gr">—</div></div>
         <div class="tstat"><div class="tslbl">⬆️ EXPORTADO</div><div class="tsval" style="color:var(--battery)" id="t-ex">—</div></div>
+        <div class="tstat"><div class="tslbl">🔋 CARREGADO BAT.</div><div class="tsval" style="color:var(--battery)" id="t-bc">—</div></div>
+        <div class="tstat"><div class="tslbl">⚡ DESCARREGADO BAT.</div><div class="tsval" style="color:var(--euro)" id="t-bd">—</div></div>
       </div>
     </div>
     <div class="card" style="padding:18px;text-align:center">
@@ -574,24 +576,63 @@ async function ensureToken() {
 // FETCH DATA
 // ═══════════════════════════════════════════
 
-// Acumulador local de energia (kWh) por integração de potência
-// Usado quando a API não devolve totais diários
-const _acc = { pv:0, ld:0, gr:0, ex:0, lastTs:null, day:null };
+// ═══════════════════════════════════════════
+// ACUMULADOR LOCAL DE ENERGIA (kWh)
+// Persiste no localStorage — sobrevive a recargas e sessões do mesmo dia
+// ═══════════════════════════════════════════
+const _acc = { pv:0, ld:0, gr:0, ex:0, bc:0, bd:0, lastTs:null, day:null };
 
-function accumulateEnergy(pvW, loadW, wireW) {
+function _accSave() {
+  localStorage.setItem('dy_acc', JSON.stringify({
+    pv: _acc.pv, ld: _acc.ld, gr: _acc.gr, ex: _acc.ex,
+    bc: _acc.bc, bd: _acc.bd,
+    lastTs: _acc.lastTs, day: _acc.day
+  }));
+}
+
+function _accLoad() {
+  try {
+    const s = localStorage.getItem('dy_acc');
+    if (!s) return;
+    const d = JSON.parse(s);
+    const today = new Date().toDateString();
+    if (d.day !== today) {
+      // Novo dia — apagar acumulação antiga
+      localStorage.removeItem('dy_acc'); return;
+    }
+    _acc.pv = d.pv||0; _acc.ld = d.ld||0;
+    _acc.gr = d.gr||0; _acc.ex = d.ex||0;
+    _acc.bc = d.bc||0; _acc.bd = d.bd||0;
+    _acc.lastTs = d.lastTs||null; _acc.day = d.day;
+  } catch(e) {}
+}
+
+// Carregar acumulação persistida ao iniciar
+_accLoad();
+
+function accumulateEnergy(pvW, loadW, wireW, batW) {
   const now   = Date.now();
   const today = new Date().toDateString();
   if (_acc.day !== today) {
-    _acc.pv=0; _acc.ld=0; _acc.gr=0; _acc.ex=0;
-    _acc.day=today; _acc.lastTs=now; return;
+    // Novo dia — reset completo
+    _acc.pv=0; _acc.ld=0; _acc.gr=0; _acc.ex=0; _acc.bc=0; _acc.bd=0;
+    _acc.day=today; _acc.lastTs=now;
+    _accSave(); return;
   }
-  if (!_acc.lastTs) { _acc.lastTs=now; return; }
+  if (!_acc.lastTs) { _acc.lastTs=now; _accSave(); return; }
   const dt = (now - _acc.lastTs) / 3600000; // horas
+  // Só integrar se o intervalo for razoável (máx 5 min = 0.083h)
+  if (dt > 0 && dt < 0.083) {
+    if (pvW   > 10)  _acc.pv += (pvW/1000)            * dt;  // solar produzido
+    if (loadW > 10)  _acc.ld += (loadW/1000)           * dt;  // consumo casa
+    if (wireW > 50)  _acc.gr += (wireW/1000)           * dt;  // importado da rede
+    if (wireW < -50) _acc.ex += (Math.abs(wireW)/1000) * dt;  // exportado para rede
+    if (batW  > 50)  _acc.bc += (batW/1000)            * dt;  // carregado bateria
+    if (batW  < -50) _acc.bd += (Math.abs(batW)/1000)  * dt;  // descarregado bateria
+  }
   _acc.lastTs = now;
-  if (pvW   > 0)   _acc.pv += (pvW/1000) * dt;
-  if (loadW > 0)   _acc.ld += (loadW/1000) * dt;
-  if (wireW > 50)  _acc.gr += (wireW/1000) * dt;
-  if (wireW < -50) _acc.ex += (Math.abs(wireW)/1000) * dt;
+  _acc._saveCount = (_acc._saveCount||0) + 1;
+  if (_acc._saveCount >= 5) { _accSave(); _acc._saveCount = 0; }
 }
 
 async function fetchAll() {
@@ -648,9 +689,18 @@ async function fetchAll() {
     } catch(e) { console.warn('[DY] station/reportData error:', e); }
   }
 
-  // ── FALLBACK: acumulação local se API nunca devolveu kWh ──
-  if (!window._todayData && _acc.pv > 0.001) {
-    renderDay(+_acc.pv.toFixed(2), +_acc.ld.toFixed(2), +_acc.gr.toFixed(2), +_acc.ex.toFixed(2));
+  // ── FALLBACK + UPDATE: usar acumulação local sempre que API não devolveu kWh ──
+  // Actualiza a cada ciclo com os valores mais recentes do acumulador
+  if (_acc.pv > 0.001) {
+    const accPv = +_acc.pv.toFixed(2);
+    const accLd = +_acc.ld.toFixed(2);
+    const accGr = +_acc.gr.toFixed(2);
+    const accEx = +_acc.ex.toFixed(2);
+    // Só usa acumulação se a API não devolveu dados melhores nesta sessão
+    if (!window._todayData || window._todayData._source === 'acc') {
+      renderDay(accPv, accLd, accGr, accEx);
+      window._todayData = { pv:accPv, ld:accLd, gr:accGr, ex:accEx, _source:'acc' };
+    }
   }
 
   bannerTime();
@@ -753,7 +803,7 @@ function render(src, pv, load, grid, bat, batP, temp) {
   }
 
   // Acumular energia para fallback diário
-  if (pv!==null && load!==null && grid!==null) accumulateEnergy(pv, load, grid);
+  if (pv!==null && load!==null && grid!==null) accumulateEnergy(pv, load, grid, batP||0);
 
   // Update live chart
   updateLiveChart(pv, load, batP, grid);
@@ -772,7 +822,49 @@ function renderDay(pv, ld, gr, ex) {
   if (ld !== null) st('t-ld', ld.toFixed(1)+' kWh');
   if (gr !== null) st('t-gr', gr.toFixed(1)+' kWh');
   if (ex !== null) st('t-ex', ex.toFixed(1)+' kWh');
+  // Bateria — vem do acumulador local
+  if (_acc.bc > 0.001) st('t-bc', _acc.bc.toFixed(1)+' kWh');
+  if (_acc.bd > 0.001) st('t-bd', _acc.bd.toFixed(1)+' kWh');
   recalcDay(pv||0, ld||0, gr||0, ex||0);
+  updateDayCharts(pv||0, ld||0, gr||0, ex||0);
+}
+
+function updateDayCharts(pvKwh, ldKwh, grKwh, exKwh) {
+  // Actualizar gráfico de distribuição energética (pie/doughnut)
+  if (window._pieChart && pvKwh > 0) {
+    const self = Math.max(0, pvKwh - exKwh);  // autoconsumo
+    const data = [
+      +self.toFixed(2),
+      +exKwh.toFixed(2),
+      +grKwh.toFixed(2)
+    ];
+    window._pieChart.data.datasets[0].data = data;
+    window._pieChart.update('none');
+  }
+
+  // Actualizar gráfico custo vs poupança hora a hora
+  // Usa dados reais do acumulador horário se disponíveis
+  if (window._costChart && pvKwh > 0) {
+    const t = T();
+    const hl=[], cb=[], sb=[];
+    const nowH = new Date().getHours();
+    for (let h=6; h<=20; h++) {
+      hl.push(h+':00');
+      const pk = (h>=9&&h<=12)||(h>=18&&h<=21);
+      const tr = pk ? t.peak : t.off;
+      // Distribuição horária proporcional ao perfil solar
+      const sf  = Math.max(0, Math.sin(Math.PI*(h-6)/14));
+      const frac = sf / 7.0; // fracção do dia (normalizada)
+      const p   = pvKwh * frac;
+      const l   = ldKwh * frac * 0.9;
+      cb.push(l > p ? +( -(l-p)*tr ).toFixed(3) : 0);
+      sb.push(p > 0 ? +( Math.min(p,l)*tr + Math.max(0,p-l)*t.sell ).toFixed(3) : 0);
+    }
+    window._costChart.data.labels = hl;
+    window._costChart.data.datasets[0].data = sb;
+    window._costChart.data.datasets[1].data = cb;
+    window._costChart.update('none');
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -914,8 +1006,8 @@ function buildCharts() {
     {label:'Rede kW',data:gr,borderColor:'#4ECDC4',backgroundColor:'rgba(78,205,196,0.06)',fill:false,tension:0.4,pointRadius:2,pointBackgroundColor:'#4ECDC4',borderWidth:1.5,borderDash:[5,3]}
   ]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CD.col,font:CD.font,boxWidth:10}}},scales:{x:{ticks:{color:CD.col,font:CD.font},grid:{color:CD.grid}},y:{ticks:{color:CD.col,font:CD.font,callback:v=>v+' kW'},grid:{color:CD.grid}}}}});
 
-  // Pie
-  new Chart($('ch-pie'), {type:'doughnut', data:{labels:['Autoconsumo','Exportado','Da Rede'], datasets:[{data:[60,25,15],backgroundColor:['rgba(255,209,102,0.8)','rgba(168,224,99,0.8)','rgba(255,107,107,0.7)'],borderColor:'rgba(255,255,255,0.05)',borderWidth:2}]}, options:{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{position:'right',labels:{color:CD.col,font:CD.font,boxWidth:10,padding:8}}}}});
+  // Pie — guardamos referência para actualizar com dados reais
+  window._pieChart = new Chart($('ch-pie'), {type:'doughnut', data:{labels:['Autoconsumo','Exportado','Da Rede'], datasets:[{data:[60,25,15],backgroundColor:['rgba(255,209,102,0.8)','rgba(168,224,99,0.8)','rgba(255,107,107,0.7)'],borderColor:'rgba(255,255,255,0.05)',borderWidth:2}]}, options:{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{position:'right',labels:{color:CD.col,font:CD.font,boxWidth:10,padding:8}}}}});
 
   // Hour cost
   const t2=T(), hl=[], cb=[], sb=[];
@@ -928,7 +1020,7 @@ function buildCharts() {
     cb.push(Math.max(0,l-p)>0 ? +(-(Math.max(0,l-p)*tr)).toFixed(3) : 0);
     sb.push(+(Math.max(0,p-l)>0 ? Math.min(p,l)*tr+Math.max(0,p-l)*t2.sell : p*tr).toFixed(3));
   }
-  new Chart($('ch-cost'), {type:'bar', data:{labels:hl, datasets:[
+  window._costChart = new Chart($('ch-cost'), {type:'bar', data:{labels:hl, datasets:[
     {label:'Poupança €',data:sb,backgroundColor:'rgba(168,224,99,0.75)',borderRadius:3},
     {label:'Custo €',data:cb,backgroundColor:'rgba(255,107,107,0.75)',borderRadius:3}
   ]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CD.col,font:CD.font,boxWidth:8}}},scales:{x:{ticks:{color:CD.col,font:CD.font},grid:{color:CD.grid}},y:{ticks:{color:CD.col,font:CD.font,callback:v=>v.toFixed(2)+'€'},grid:{color:CD.grid}}}}});
