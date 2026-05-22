@@ -570,13 +570,33 @@ async function ensureToken() {
 }
 
 // ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
 // FETCH DATA
 // ═══════════════════════════════════════════
+
+// Acumulador local de energia (kWh) por integração de potência
+// Usado quando a API não devolve totais diários
+const _acc = { pv:0, ld:0, gr:0, ex:0, lastTs:null, day:null };
+
+function accumulateEnergy(pvW, loadW, wireW) {
+  const now   = Date.now();
+  const today = new Date().toDateString();
+  if (_acc.day !== today) {
+    _acc.pv=0; _acc.ld=0; _acc.gr=0; _acc.ex=0;
+    _acc.day=today; _acc.lastTs=now; return;
+  }
+  if (!_acc.lastTs) { _acc.lastTs=now; return; }
+  const dt = (now - _acc.lastTs) / 3600000; // horas
+  _acc.lastTs = now;
+  if (pvW   > 0)   _acc.pv += (pvW/1000) * dt;
+  if (loadW > 0)   _acc.ld += (loadW/1000) * dt;
+  if (wireW > 50)  _acc.gr += (wireW/1000) * dt;
+  if (wireW < -50) _acc.ex += (Math.abs(wireW)/1000) * dt;
+}
+
 async function fetchAll() {
   if (!await ensureToken()) return;
   const appId = localStorage.getItem('dy_appId') || CFG.appId;
-  const devSn = CFG.devSn;
-  const logSn = CFG.logSn;
 
   // ── STATION LIST (descobrir stationId — só uma vez) ──
   let sid = localStorage.getItem('dy_stationId') || '';
@@ -593,7 +613,7 @@ async function fetchAll() {
     } catch(e) { console.warn('[DY] station/list error:', e); }
   }
 
-  // ── STATION LATEST (potência em tempo real + totais via station) ──
+  // ── STATION LATEST (potência em tempo real) ──
   if (sid) {
     try {
       const r = await api('/v1.0/station/latest?appId=' + appId, { stationId: sid });
@@ -604,40 +624,38 @@ async function fetchAll() {
     } catch(e) { console.warn('[DY] station/latest error:', e); }
   }
 
-  // ── DEVICE LIST + DEVICE LATEST (kWh diários reais via Etdy_ge0, etc.) ──
-  // O /device/latest precisa do deviceSn correcto da API (pode diferir do SN físico).
-  // Primeiro descobrimos os SNs via /device/list, depois tentamos /device/latest.
-  let devSnList = [];
-  try {
-    const dl = await api('/v1.0/device/list?appId=' + appId, { page: 1, size: 10 });
-    console.log('[DY] device/list:', JSON.stringify(dl).substring(0, 600));
-    const devices = dl.deviceList || dl.data?.deviceList || dl.data || [];
-    const arr = Array.isArray(devices) ? devices : [];
-    devSnList = arr.map(d => String(d.deviceSn || d.sn || d.serialNumber || '')).filter(Boolean);
-    console.log('[DY] device SNs encontrados:', devSnList);
-  } catch(e) { console.warn('[DY] device/list error:', e); }
-
-  // Fallback: usar SNs do CFG se device/list não devolver nada
-  if (devSnList.length === 0) {
-    devSnList = [devSn, logSn].filter(Boolean).map(String);
-  }
-
-  for (const sn of devSnList) {
+  // ── STATION REPORT DATA (totais diários) ──
+  if (sid) {
     try {
-      const r = await api('/v1.0/device/latest?appId=' + appId, { deviceSn: sn });
-      console.log('[DY] device/latest(' + sn + '):', JSON.stringify(r).substring(0, 800));
+      const today = new Date().toISOString().split('T')[0].replace(/-/g,'');
+      const r = await api('/v1.0/station/reportData?appId=' + appId, {
+        stationId:  sid,
+        reportType: 1,
+        queryTime:  today
+      });
+      console.log('[DY] station/reportData:', JSON.stringify(r).substring(0, 800));
       if (r && r.code === '1000000') {
-        const list = r.dataList || r.data?.dataList || r.data || [];
-        if (Array.isArray(list) && list.length > 0) {
-          applyDeviceData(list);
-          break;
+        const d   = r.data || r;
+        const tPv = num(d.generationValue || d.pvValue    || d.pvEnergy    || d.generation);
+        const tLd = num(d.consumptionValue|| d.useValue   || d.loadEnergy  || d.consumption);
+        const tGr = num(d.buyValue        || d.purchaseValue || d.importEnergy || d.gridBuy);
+        const tEx = num(d.sellValue       || d.wireValue  || d.exportEnergy || d.gridSell);
+        if (tPv !== null && tPv > 0) {
+          renderDay(tPv, tLd, tGr, tEx);
+          window._todayData = { pv:tPv||0, ld:tLd||0, gr:tGr||0, ex:tEx||0 };
         }
       }
-    } catch(e) { console.warn('[DY] device/latest(' + sn + ') error:', e); }
+    } catch(e) { console.warn('[DY] station/reportData error:', e); }
+  }
+
+  // ── FALLBACK: acumulação local se API nunca devolveu kWh ──
+  if (!window._todayData && _acc.pv > 0.001) {
+    renderDay(+_acc.pv.toFixed(2), +_acc.ld.toFixed(2), +_acc.gr.toFixed(2), +_acc.ex.toFixed(2));
   }
 
   bannerTime();
 }
+
 
 function applyStation(resp) {
   // A API Deye EU encapsula os dados em resp.data quando code='1000000'
@@ -733,6 +751,9 @@ function render(src, pv, load, grid, bat, batP, temp) {
     $('auto-bar').style.width = Math.min(100,(auto/24)*100)+'%';
     st('auto-sub', `Cap. útil: ${usable.toFixed(1)} kWh · Noite: ${night.toFixed(1)} kW`);
   }
+
+  // Acumular energia para fallback diário
+  if (pv!==null && load!==null && grid!==null) accumulateEnergy(pv, load, grid);
 
   // Update live chart
   updateLiveChart(pv, load, batP, grid);
